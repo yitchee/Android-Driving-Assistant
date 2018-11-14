@@ -15,13 +15,19 @@ import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Point;
+import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
 
 	private static final String TAG = "MainActivity";
 	JavaCameraView javaCameraView;
-	Mat mRgba, imgGray, imgCanny;
+	Mat mGray, imgCanny, imgHsv, imgCopy;
+	Mat circles;
+	int imgWidth=960, imgHeight=544;
+
 	BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
 		@Override
 		public void onManagerConnected(int status) {
@@ -62,7 +68,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 		javaCameraView.setCvCameraViewListener(this);
 
 		javaCameraView.enableFpsMeter();
-		javaCameraView.setMaxFrameSize(960, 544);
+		javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
 	}
 
 	@Override
@@ -100,23 +106,48 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
 	@Override
 	public void onCameraViewStarted(int width, int height) {
-		mRgba  = new Mat(height, width, CvType.CV_8UC4);
-		imgGray  = new Mat(height, width, CvType.CV_8UC1);
-		imgCanny  = new Mat(height, width, CvType.CV_8UC1);
+		mGray  = new Mat(height, width, CvType.CV_8UC4);
+//		imgCanny  = new Mat(height, width, CvType.CV_8UC1);
+//		imgHsv = new Mat(height, width, CvType.CV_8UC4);
+		imgCopy = new Mat(height, width, CvType.CV_8UC4);
+		circles = new Mat();
 	}
-
 	@Override
 	public void onCameraViewStopped() {
-		mRgba.release();
+		mGray.release();
+//		imgCanny.release();
+//		imgHsv.release();
+		imgCopy.release();
+		circles.release();
+
 	}
 
 	@Override
 	public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-		mRgba = inputFrame.rgba();
+		mGray = inputFrame.gray();
+		Imgproc.blur(mGray, mGray, new Size(7, 7), new Point(2, 2));
+		Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 350, 100, 90, 50, 250);
+//		Imgproc.cvtColor(mRgba, imgHsv, Imgproc.COLOR_RGB2HSV);
 
-		Imgproc.cvtColor(mRgba, imgGray, Imgproc.COLOR_RGB2GRAY);
-		Imgproc.Canny(imgGray, imgCanny, 80, 100);
-		return imgCanny;
+		if (circles.cols() > 0) {
+			for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
+				double circleVec[] = circles.get(0, x);
+
+				if (circleVec == null) {
+					break;
+				}
+
+				Point center = new Point((int) circleVec[0], (int) circleVec[1]);
+				int radius = (int) circleVec[2];
+
+				Imgproc.circle(mGray, center, 3, new Scalar(255, 255, 255), 5);
+				Imgproc.circle(mGray, center, radius, new Scalar(255, 255, 255), 2);
+			}
+		}
+
+		circles.release();
+		mGray.release();
+		return inputFrame.rgba();
 	}
 
 	private void setFullscreen() {
