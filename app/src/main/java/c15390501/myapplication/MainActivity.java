@@ -1,10 +1,16 @@
 package c15390501.myapplication;
 
+import android.graphics.Bitmap;
+import android.os.Looper;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.InputFilter;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.InputDevice;
 import android.view.SurfaceView;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -13,9 +19,11 @@ import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
@@ -24,8 +32,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
 	private static final String TAG = "MainActivity";
 	JavaCameraView javaCameraView;
-	Mat mGray, imgCanny, imgHsv, imgCopy;
+	ImageView signImageView;
+	Mat mGray, imgCopy;
 	Mat circles;
+	Mat signCopy;
+	Rect signRegion;
+	Bitmap bm;
 	int imgWidth=960, imgHeight=544;
 
 	BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -63,12 +75,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 		/*TextView tv = (TextView) findViewById(R.id.sample_text);
 		tv.setText(stringFromJNI());*/
 
-		javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_veiw);
+		javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
 		javaCameraView.setVisibility(SurfaceView.VISIBLE);
 		javaCameraView.setCvCameraViewListener(this);
 
 		javaCameraView.enableFpsMeter();
 		javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
+
+		signImageView = (ImageView) findViewById(R.id.sign_image_view);
+
+		Log.i(TAG, "onCreate: " + Thread.currentThread());
 	}
 
 	@Override
@@ -107,27 +123,25 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 	@Override
 	public void onCameraViewStarted(int width, int height) {
 		mGray  = new Mat(height, width, CvType.CV_8UC4);
-//		imgCanny  = new Mat(height, width, CvType.CV_8UC1);
-//		imgHsv = new Mat(height, width, CvType.CV_8UC4);
 		imgCopy = new Mat(height, width, CvType.CV_8UC4);
 		circles = new Mat();
+		signCopy = new Mat();
 	}
+
 	@Override
 	public void onCameraViewStopped() {
 		mGray.release();
-//		imgCanny.release();
-//		imgHsv.release();
 		imgCopy.release();
 		circles.release();
-
+		signCopy.release();
 	}
 
 	@Override
-	public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+	public Mat onCameraFrame(final CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+//		Log.i(TAG, "onCreate: " + Thread.currentThread());
 		mGray = inputFrame.gray();
-		Imgproc.blur(mGray, mGray, new Size(7, 7), new Point(2, 2));
-		Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 350, 100, 90, 50, 250);
-//		Imgproc.cvtColor(mRgba, imgHsv, Imgproc.COLOR_RGB2HSV);
+		Imgproc.blur(mGray, mGray, new Size(5, 5), new Point(2, 2));
+		Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 100);
 
 		if (circles.cols() > 0) {
 			for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
@@ -138,15 +152,46 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 				}
 
 				Point center = new Point((int) circleVec[0], (int) circleVec[1]);
-				int radius = (int) circleVec[2];
+				int radius = 1;
+				radius = (int) circleVec[2];
 
-				Imgproc.circle(mGray, center, 3, new Scalar(255, 255, 255), 5);
-				Imgproc.circle(mGray, center, radius, new Scalar(255, 255, 255), 2);
+//				Imgproc.circle(mGray, center, 3, new Scalar(255, 255, 255), 5);
+//				Imgproc.circle(mGray, center, radius, new Scalar(255, 255, 255), 2);
+
+				// defines the ROI
+				signRegion = new Rect((int) (center.x - radius), (int) (center.y - radius), radius*2, radius*2);
+//				Imgproc.cvtColor(signCopy, signCopy, Imgproc.COLOR_GRAY2RGB);
+
+				final int r = radius;
+
+				// Set detected circle to ImageView using the Main UI Thread
+				runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						try
+						{
+							// Copies ROI into new Mat
+							signCopy = new Mat(inputFrame.rgba(), signRegion);
+
+							// Creates a bitmap with size of detected circle and stores the Mat into it
+							bm = Bitmap.createBitmap(Math.abs(r * 2), Math.abs(r * 2), Bitmap.Config.ARGB_8888);
+							Utils.matToBitmap(signCopy, bm);
+
+							signImageView.setImageBitmap(bm);
+						} catch (Exception e) {
+							Log.e(TAG, "onCreate: " + e);
+						}
+
+					}
+				});
+
+				Log.i(TAG, "onCreate: " + Math.abs(radius*2));
 			}
 		}
 
 		circles.release();
 		mGray.release();
+		signCopy.release();
 		return inputFrame.rgba();
 	}
 

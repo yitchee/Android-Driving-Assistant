@@ -7,8 +7,17 @@
     tools:context=".MainActivity">
 
     <org.opencv.android.JavaCameraView
+        android:id="@+id/java_camera_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:id="@+id/java_camera_veiw" />
+        android:layout_height="match_parent" />
+
+    <android.support.v7.widget.AppCompatImageView
+        android:id="@+id/sign_image_view"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_alignParentStart="true"
+        android:layout_margin="5dp"
+        android:src="#ffffff" />
 
 </android.support.constraint.ConstraintLayout>
