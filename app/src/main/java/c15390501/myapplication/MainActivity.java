@@ -138,7 +138,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
 	@Override
 	public Mat onCameraFrame(final CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-//		Log.i(TAG, "onCreate: " + Thread.currentThread());
 		mGray = inputFrame.gray();
 		Imgproc.blur(mGray, mGray, new Size(5, 5), new Point(2, 2));
 		Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 100);
@@ -155,12 +154,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 				int radius = 1;
 				radius = (int) circleVec[2];
 
-//				Imgproc.circle(mGray, center, 3, new Scalar(255, 255, 255), 5);
+				// outlines detected circle
+//				Imgproc.circle(mGray, center, 3, new Scalar(255, 255, 255), 3);
 //				Imgproc.circle(mGray, center, radius, new Scalar(255, 255, 255), 2);
 
+				int val = (radius*2) + 20;
 				// defines the ROI
-				signRegion = new Rect((int) (center.x - radius), (int) (center.y - radius), radius*2, radius*2);
-//				Imgproc.cvtColor(signCopy, signCopy, Imgproc.COLOR_GRAY2RGB);
+				signRegion = new Rect((int) (center.x - radius - 10), (int) (center.y - radius - 10), val, val);
 
 				final int r = radius;
 
@@ -174,14 +174,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 							signCopy = new Mat(inputFrame.rgba(), signRegion);
 
 							// Creates a bitmap with size of detected circle and stores the Mat into it
-							bm = Bitmap.createBitmap(Math.abs(r * 2), Math.abs(r * 2), Bitmap.Config.ARGB_8888);
+							bm = Bitmap.createBitmap(Math.abs((r * 2) + 20), Math.abs((r * 2) + 20), Bitmap.Config.ARGB_8888);
 							Utils.matToBitmap(signCopy, bm);
 
 							signImageView.setImageBitmap(bm);
 						} catch (Exception e) {
 							Log.e(TAG, "onCreate: " + e);
 						}
-
 					}
 				});
 
