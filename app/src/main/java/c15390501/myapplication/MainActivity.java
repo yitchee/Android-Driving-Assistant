@@ -28,7 +28,9 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
+import c15390501.myapplication.ui.ScreenInterface;
+
+public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
 
 	private static final String TAG = "MainActivity";
 	JavaCameraView javaCameraView;
@@ -194,7 +196,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 		return inputFrame.rgba();
 	}
 
-	private void setFullscreen() {
+	public void setFullscreen() {
 		this.getWindow().getDecorView().setSystemUiVisibility(
 			View.SYSTEM_UI_FLAG_LAYOUT_STABLE
 			| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
