@@ -5,23 +5,30 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.WindowManager;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Rect;
+import org.opencv.core.Size;
+import org.opencv.imgproc.Imgproc;
 
 import c15390501.myapplication.ui.ScreenInterface;
 
 public class LaneDetectionActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
 
-	private static final String TAG = "MainActivity";
+	private static final String TAG = "LaneDetectionActivity";
 	JavaCameraView javaCameraView;
-	Mat mGray, imgCopy;
+	Mat mGray, mCopy, mEdges;
+	Rect roi;
 	int imgWidth=960, imgHeight=544;
+	private Mat mIntermediateMat;
 
 	BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
 		@Override
@@ -50,6 +57,7 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_lane_detection);
 
 		javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
@@ -91,24 +99,37 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 	@Override
 	public void onCameraViewStarted(int width, int height)
 	{
-		mGray  = new Mat(height, width, CvType.CV_8UC4);
-		imgCopy = new Mat(height, width, CvType.CV_8UC4);
+		mIntermediateMat = new Mat();
 	}
 
 	@Override
 	public void onCameraViewStopped()
 	{
-		mGray.release();
-		imgCopy.release();
+		// Explicitly deallocate Mats
+		if (mIntermediateMat != null)
+			mIntermediateMat.release();
+
+		mIntermediateMat = null;
 	}
 
 	@Override
 	public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame)
 	{
-		mGray = inputFrame.gray();
+		Mat rgba = inputFrame.rgba();
+		Size sizeRgba = rgba.size();
+		int rows = (int) sizeRgba.height;
+		int cols = (int) sizeRgba.width;
+		int left = rows / 5;
+		int width = cols - left;
+		double top = rows / 2.5;
 
+		Mat rgbaInnerWindow;
 
-		return mGray;
+		rgbaInnerWindow = rgba.submat((int)top, rows, left, width);
+		Imgproc.Canny(rgbaInnerWindow, mIntermediateMat, 80, 90);
+		Imgproc.cvtColor(mIntermediateMat, rgbaInnerWindow, Imgproc.COLOR_GRAY2BGRA, 4);
+		rgbaInnerWindow.release();
+		return rgba;
 	}
 
 	@Override
