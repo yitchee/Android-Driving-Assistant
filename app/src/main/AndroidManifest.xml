@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="c15390501.myapplication">
+    package="ycc.androiddrivingassistant">
 
     <uses-permission android:name="android.permission.CAMERA" />
 
