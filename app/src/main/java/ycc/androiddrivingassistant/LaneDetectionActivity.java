@@ -9,7 +9,8 @@ import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.ImageView;
+
+import com.squareup.leakcanary.LeakCanary;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -20,10 +21,15 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
+import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
+
+import java.io.FileOutputStream;
+import java.util.Random;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
 
@@ -31,12 +37,18 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
     private static final String TAG = "LaneDetectionActivity";
     JavaCameraView javaCameraView;
-    Mat mGray, mCopy, mEdges;
+    Mat rgba, mGray, mCopy, mEdges;
+    Mat outY, outW, out, white, yellow, hsv;
     Rect roi;
     int imgWidth=960, imgHeight=544;
     private Mat mIntermediateMat;
 
-    ImageView laneImageView;
+    int rows = imgHeight;
+    int cols = imgWidth;
+    int left = rows / 5;
+    int width = cols - left;
+    double top = rows / 2.5;
+
     Bitmap bmp;
 
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -60,6 +72,14 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+
+        if (LeakCanary.isInAnalyzerProcess(this)) {
+            // This process is dedicated to LeakCanary for heap analysis.
+            // You should not init your app in this process.
+            return;
+        }
+        LeakCanary.install(this.getApplication());
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_lane_detection);
 
@@ -67,10 +87,10 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
 
-        laneImageView = (ImageView) findViewById(R.id.lane_view);
-
         javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
+
+
     }
 
     @Override
@@ -105,6 +125,12 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     public void onCameraViewStarted(int width, int height)
     {
         mIntermediateMat = new Mat();
+        outY = new Mat();
+        outW = new Mat();
+        out = new Mat();
+        yellow = new Mat();
+        white = new Mat();
+        hsv = new Mat();
     }
 
     @Override
@@ -117,65 +143,122 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         mIntermediateMat = null;
     }
 
-    @Override
-    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame)
-    {
-        Mat rgba = inputFrame.rgba();
-        Size sizeRgba = rgba.size();
-        int rows = (int) sizeRgba.height;
-        int cols = (int) sizeRgba.width;
-        int left = rows / 5;
-        int width = cols - left;
-        double top = rows / 2.5;
 
-        Bitmap bm;
+    private Scalar lowYellow=new Scalar(0, 100, 100), highYellow=new Scalar(50, 255, 255),
+            lowWhite=new Scalar(20, 0, 180), highWhite= new Scalar(255, 80, 255);
+    private Size blurVal = new Size(5, 5);
+    private Point blurPt = new Point(2, 2);
+
+    @Override
+    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        //System.gc();
+
+        rgba = inputFrame.rgba();
+        Imgproc.blur(inputFrame.rgba(), inputFrame.rgba(), blurVal, blurPt);
 
         Mat rgbaInnerWindow;
-
+        Mat lines = new Mat();
         // rgbaInnerWindow & mIntermediateMat = ROI Mats
         rgbaInnerWindow = rgba.submat((int)top, rows, left, width);
-        Imgproc.Canny(rgbaInnerWindow, mIntermediateMat, 80, 90);
-        Imgproc.cvtColor(mIntermediateMat, rgbaInnerWindow, Imgproc.COLOR_GRAY2BGRA, 4);
 
-//		bm = Bitmap.createBitmap(rgbaInnerWindow.width(), rgbaInnerWindow.height(), Bitmap.Config.ARGB_8888);
-//		Utils.matToBitmap(rgbaInnerWindow, bm);\
-        Point pt1 = new Point(0, 0);
-        Point pt2 = new Point(mIntermediateMat.size().width, 0);
-        Point pt3 = new Point(0, mIntermediateMat.size().height);
-        Point pt4 = new Point(mIntermediateMat.size().width, mIntermediateMat.size().height);
+        Imgproc.cvtColor(rgbaInnerWindow, hsv, Imgproc.COLOR_RGB2HSV);
 
-        Mat mOriginal = new Mat();
-        Log.i(TAG, "onCameraFrame: " + pt1 + "" + pt2 + "" + pt3 + "" + pt4);
+        Core.inRange(hsv, lowYellow, highYellow, yellow);
+        Core.inRange(hsv, lowWhite, highWhite, white);
+        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outY, yellow);
+        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outW, white);
+        Core.add(outW, outY, out);
 
-        final Mat mPerspective = Imgproc.getPerspectiveTransform(rgbaInnerWindow, mOriginal);
+        white.release();
+        yellow.release();
+        outW.release();
+        outY.release();
 
-        // Set detected circle to ImageView using the Main UI Thread
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                try
-                {
-                    // Copies ROI into new Mat
+        Imgproc.Canny(rgbaInnerWindow, out, 75, 150);
+        Imgproc.cvtColor(out, rgbaInnerWindow, Imgproc.COLOR_GRAY2BGRA, 4);
+        Imgproc.HoughLinesP(out, lines, 1, Math.PI/180, 50, 50, 50);
 
+        for (int i=0; i<lines.rows(); i++) {
+            Log.i(TAG, "onCameraFrame: "+ lines.cols());
+            double[] points = lines.get(i, 0);
+            double x1, y1, x2, y2;
 
-                    // Creates a bitmap with size of detected circle and stores the Mat into it
-                    bmp = Bitmap.createBitmap(mPerspective.width(), mPerspective.height(), Bitmap.Config.ARGB_8888);
-                    Utils.matToBitmap(mPerspective, bmp);
+            try {
+                x1 = points[0];
+                y1 = points[1];
+                x2 = points[2];
+                y2 = points[3];
 
-                    laneImageView.getLayoutParams().width = mPerspective.width();
-                    laneImageView.getLayoutParams().height = mPerspective.height();
-                    laneImageView.setImageBitmap(bmp);
-                } catch (Exception e) {
-                    Log.e(TAG, "onCreate: " + e);
+                Point p1 = new Point(x1, y1);
+                Point p2 = new Point(x2, y2);
+
+                float slope = (float)(p2.y - p1.y) / (float)(p2.x - p1.x);
+                Log.i(TAG, "onCameraFrame: " + slope);
+                if (slope > 0.5 && slope < 2 ) {
+                    Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
+                    Log.i(TAG, "onCameraFrame: " + slope);
+                } else if (slope > -2 && slope < -0.5) {
+                    Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
+                    Log.i(TAG, "onCameraFrame: " + slope);
                 }
+
+            } catch (Error e) {
+                Log.e(TAG, "onCameraFrame: ", e);
             }
-        });
-        //Imgproc.warpPerspective();
+        }
+
+        Point pt1 = new Point(250, 20);
+        Point pt2 = new Point(out.size().width - 250, 20);
+        Point pt3 = new Point(50, out.size().height-25);
+        Point pt4 = new Point(out.size().width-50, out.size().height-25);
+
+        Imgproc.circle(rgbaInnerWindow, pt1, 2, new Scalar(255, 0, 0), 5);
+        Imgproc.circle(rgbaInnerWindow, pt2, 2, new Scalar(255, 0, 0), 5);
+        Imgproc.circle(rgbaInnerWindow, pt3, 2, new Scalar(255, 0, 0), 5);
+        Imgproc.circle(rgbaInnerWindow, pt4, 2, new Scalar(255, 0, 0), 5);
+
+        MatOfPoint2f src = new MatOfPoint2f(
+                pt1, pt2, pt3, pt4);
+
+        MatOfPoint2f dst = new MatOfPoint2f(
+                new Point(0, 0),
+                new Point(600, 0),
+                new Point(0, 900),
+                new Point(600, 900));
+
+
+//        Mat warpMat = Imgproc.getPerspectiveTransform(src, dst);
+
+//        Mat dstImage = new Mat();
+
+//        Imgproc.warpPerspective(rgbaInnerWindow, dstImage, warpMat, new Size(600, 900));
+//        Imgproc.warpPerspective(rgbaInnerWindow, dstImage, warpMat, new Size(600, 900), Imgproc.CV_WARP_INVERSE_MAP);
+
+//        bmp = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888);
+//        Utils.matToBitmap(dstImage, bmp);
+
 
         rgbaInnerWindow.release();
 
         return rgba;
     }
+
+
+    public void  onClickBtn(View v) {
+        Random generator = new Random();
+        int n = 10000;
+        n = generator.nextInt();
+        try {
+            FileOutputStream fout = new FileOutputStream(Environment.getExternalStorageDirectory().toString() + "/image" + n + ".png");
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, fout);
+            bmp.recycle();
+            fout.flush();
+            fout.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     @Override
     public void setFullscreen()

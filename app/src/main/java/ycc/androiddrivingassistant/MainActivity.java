@@ -133,6 +133,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public Mat onCameraFrame(final CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        System.gc();
+
         mGray = inputFrame.gray();
         Imgproc.blur(mGray, mGray, new Size(5, 5), new Point(2, 2));
         Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 100);
