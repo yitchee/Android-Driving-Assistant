@@ -1,8 +1,18 @@
 package ycc.androiddrivingassistant;
 
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Camera;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.params.StreamConfigurationMap;
+import android.os.Build;
 import android.os.Environment;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -29,9 +39,12 @@ import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.io.FileOutputStream;
+import java.util.List;
 import java.util.Random;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
+
+import android.hardware.camera2.*;
 
 public class LaneDetectionActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
 
@@ -40,14 +53,11 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     Mat rgba, mGray, mCopy, mEdges;
     Mat outY, outW, out, white, yellow, hsv;
     Rect roi;
-    int imgWidth=960, imgHeight=544;
+    int imgWidth=1920, imgHeight=1080;
     private Mat mIntermediateMat;
 
-    int rows = imgHeight;
-    int cols = imgWidth;
-    int left = rows / 5;
-    int width = cols - left;
-    double top = rows / 2.5;
+    int rows, cols, left, width;
+    double top;
 
     Bitmap bmp;
 
@@ -72,13 +82,49 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+        //Check if permission is already granted
+        //thisActivity is your activity. (e.g.: MainActivity.this)
+        if (ContextCompat.checkSelfPermission(getApplicationContext(),
+                Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
 
-        if (LeakCanary.isInAnalyzerProcess(this)) {
-            // This process is dedicated to LeakCanary for heap analysis.
-            // You should not init your app in this process.
-            return;
+            // Give first an explanation, if needed.
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.CAMERA)) {
+                // Show an explanation to the user *asynchronously* -- don't block
+                // this thread waiting for the user's response! After the user
+                // sees the explanation, try again to request the permission.
+            } else {
+                // No explanation needed, we can request the permission.
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA},
+                        1);
+            }
         }
-        LeakCanary.install(this.getApplication());
+
+        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            assert manager != null;
+            String cameraId = manager.getCameraIdList()[0];
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            assert map != null;
+
+            for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
+                Log.i(TAG, "imageDimension " + size);
+                float ratio = (float)size.getWidth() / (float)size.getHeight();
+                if (ratio >= 1.3 && size.getWidth() < 900) {
+                    imgHeight = size.getHeight();
+                    imgWidth = size.getWidth();
+                    break;
+                }
+                Log.i(TAG, "ratio: " + ratio);
+            }
+        }catch (Error error) {
+            Log.e(TAG, "onCreate: ", error);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_lane_detection);
@@ -89,8 +135,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
         javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
-
-
     }
 
     @Override
@@ -122,8 +166,14 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
     @Override
-    public void onCameraViewStarted(int width, int height)
+    public void onCameraViewStarted(int w, int h)
     {
+        rows = h;
+        cols = w;
+        left = rows / 5;
+        width = cols - left;
+        top = rows / 2.5;
+
         mIntermediateMat = new Mat();
         outY = new Mat();
         outW = new Mat();
@@ -144,8 +194,8 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
 
-    private Scalar lowYellow=new Scalar(0, 100, 100), highYellow=new Scalar(50, 255, 255),
-            lowWhite=new Scalar(20, 0, 180), highWhite= new Scalar(255, 80, 255);
+    private Scalar lowYellow = new Scalar(0, 100, 100), highYellow = new Scalar(50, 255, 255);
+    private Scalar lowWhite = new Scalar(20, 0, 180), highWhite = new Scalar(255, 80, 255);
     private Size blurVal = new Size(5, 5);
     private Point blurPt = new Point(2, 2);
 
@@ -179,7 +229,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         Imgproc.HoughLinesP(out, lines, 1, Math.PI/180, 50, 50, 50);
 
         for (int i=0; i<lines.rows(); i++) {
-            Log.i(TAG, "onCameraFrame: "+ lines.cols());
             double[] points = lines.get(i, 0);
             double x1, y1, x2, y2;
 
@@ -193,13 +242,10 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
                 Point p2 = new Point(x2, y2);
 
                 float slope = (float)(p2.y - p1.y) / (float)(p2.x - p1.x);
-                Log.i(TAG, "onCameraFrame: " + slope);
                 if (slope > 0.5 && slope < 2 ) {
                     Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
-                    Log.i(TAG, "onCameraFrame: " + slope);
                 } else if (slope > -2 && slope < -0.5) {
                     Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
-                    Log.i(TAG, "onCameraFrame: " + slope);
                 }
 
             } catch (Error e) {
@@ -226,7 +272,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
                 new Point(0, 900),
                 new Point(600, 900));
 
-
 //        Mat warpMat = Imgproc.getPerspectiveTransform(src, dst);
 
 //        Mat dstImage = new Mat();
@@ -236,7 +281,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
 //        bmp = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888);
 //        Utils.matToBitmap(dstImage, bmp);
-
 
         rgbaInnerWindow.release();
 
