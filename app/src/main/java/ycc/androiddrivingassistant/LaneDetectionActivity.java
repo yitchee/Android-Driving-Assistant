@@ -39,6 +39,8 @@ import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
@@ -50,8 +52,8 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
     private static final String TAG = "LaneDetectionActivity";
     JavaCameraView javaCameraView;
-    Mat rgba, mGray, mCopy, mEdges;
-    Mat outY, outW, out, white, yellow, hsv;
+    Mat mRgba, rgba, mGray, mCopy, mEdges;
+    Mat outY, outW, out, hsv, hls;
     Rect roi;
     int imgWidth=1920, imgHeight=1080;
     private Mat mIntermediateMat;
@@ -133,8 +135,10 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
 
-        javaCameraView.enableFpsMeter();
+//        javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
+
+        Log.i(TAG, "ThreadInfo: " + Thread.currentThread());
     }
 
     @Override
@@ -178,9 +182,18 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         outY = new Mat();
         outW = new Mat();
         out = new Mat();
-        yellow = new Mat();
-        white = new Mat();
         hsv = new Mat();
+        hls = new Mat();
+        mNew = new Mat();
+        mask = new Mat();
+        maskWhite = new Mat();
+        maskYellow = new Mat();
+        mGray = new Mat();
+        mRgba = new Mat();
+        rgba = new Mat();
+        mRed = new Mat(); mGreen = new Mat(); mBlue = new Mat();
+        mHue_hsv = new Mat(); mSat_hsv = new Mat(); mVal_hsv = new Mat();
+        mHue_hls = new Mat(); mSat_hls = new Mat(); mLight_hls = new Mat();
     }
 
     @Override
@@ -195,82 +208,107 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
 
     private Scalar lowYellow = new Scalar(0, 100, 100), highYellow = new Scalar(50, 255, 255);
-    private Scalar lowWhite = new Scalar(20, 0, 180), highWhite = new Scalar(255, 80, 255);
-    private Size blurVal = new Size(5, 5);
-    private Point blurPt = new Point(2, 2);
+    private Scalar lowWhite = new Scalar(0, 0, 200), highWhite = new Scalar(145, 60, 255);
+    private Size ksize = new Size(5, 5);
+    private double sigma = 3;
+    private Point blurPt = new Point(3, 3);
+
+    Mat mNew, mask, maskWhite, maskYellow;
+    Mat mRed, mGreen, mBlue;
+    Mat mHue_hsv, mSat_hsv, mVal_hsv;
+    Mat mHue_hls, mSat_hls, mLight_hls;
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         //System.gc();
 
-        rgba = inputFrame.rgba();
-        Imgproc.blur(inputFrame.rgba(), inputFrame.rgba(), blurVal, blurPt);
+        mRgba = inputFrame.rgba();
+        mGray = inputFrame.gray();
+
+        Imgproc.GaussianBlur(mRgba, mRgba, ksize, sigma);
 
         Mat rgbaInnerWindow;
-        Mat lines = new Mat();
+//        Mat lines = new Mat();
         // rgbaInnerWindow & mIntermediateMat = ROI Mats
-        rgbaInnerWindow = rgba.submat((int)top, rows, left, width);
+        rgbaInnerWindow = mRgba.submat((int)top, rows, left, width);
+        rgbaInnerWindow.copyTo(rgba);
 
         Imgproc.cvtColor(rgbaInnerWindow, hsv, Imgproc.COLOR_RGB2HSV);
+        Imgproc.cvtColor(rgbaInnerWindow, hls, Imgproc.COLOR_RGB2HLS);
 
-        Core.inRange(hsv, lowYellow, highYellow, yellow);
-        Core.inRange(hsv, lowWhite, highWhite, white);
-        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outY, yellow);
-        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outW, white);
-        Core.add(outW, outY, out);
+        splitRGBChannels(rgba, hsv, hls);
+        applyThreshold();
 
-        white.release();
-        yellow.release();
+//        Core.inRange(hsv, lowYellow, highYellow, yellow);
+//        Core.inRange(hsv, lowWhite, highWhite, white);
+        Core.inRange(hsv, lowWhite, highWhite, maskWhite);
+        Core.inRange(hsv, lowYellow, highYellow, maskYellow);
+        Core.bitwise_or(maskWhite, maskYellow, mask);
+//        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outY, yellow);
+//        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outW, white);
+//        Core.bitwise_and(rgbaInnerWindow, mask, rgbaInnerWindow);
+//        Core.add(outW, outY, out);
+
+        maskWhite.release();
+        maskYellow.release();
         outW.release();
         outY.release();
 
-        Imgproc.Canny(rgbaInnerWindow, out, 75, 150);
-        Imgproc.cvtColor(out, rgbaInnerWindow, Imgproc.COLOR_GRAY2BGRA, 4);
-        Imgproc.HoughLinesP(out, lines, 1, Math.PI/180, 50, 50, 50);
+        Imgproc.erode(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2,2)));
 
-        for (int i=0; i<lines.rows(); i++) {
-            double[] points = lines.get(i, 0);
-            double x1, y1, x2, y2;
+        Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2, 2)));
 
-            try {
-                x1 = points[0];
-                y1 = points[1];
-                x2 = points[2];
-                y2 = points[3];
+//        Core.bitwise_and(mGray, mask, rgba);
+//        Imgproc.Canny(mask, rgbaInnerWindow, 100, 200);
 
-                Point p1 = new Point(x1, y1);
-                Point p2 = new Point(x2, y2);
+        Imgproc.resize(mSat_hls, mNew, new Size(imgWidth, imgHeight));
 
-                float slope = (float)(p2.y - p1.y) / (float)(p2.x - p1.x);
-                if (slope > 0.5 && slope < 2 ) {
-                    Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
-                } else if (slope > -2 && slope < -0.5) {
-                    Imgproc.line(rgbaInnerWindow, p1, p2, new Scalar(0, 255, 0), 2);
-                }
+//        Imgproc.cvtColor(rgbaInnerWindow, rgbaInnerWindow, Imgproc.COLOR_GRAY2RGBA);
+//        Imgproc.HoughLinesP(rgbaInnerWindow, lines, 1, Math.PI/180, 50, 50, 50);
+//
+//        for (int i=0; i<lines.rows(); i++) {
+//            double[] points = lines.get(i, 0);
+//            double x1, y1, x2, y2;
+//
+//            try {
+//                x1 = points[0];
+//                y1 = points[1];
+//                x2 = points[2];
+//                y2 = points[3];
+//
+//                Point p1 = new Point(x1, y1);
+//                Point p2 = new Point(x2, y2);
+//
+//                float slope = (float)(p2.y - p1.y) / (float)(p2.x - p1.x);
+//                if (slope > 0.5 && slope < 2 ) {
+//                    Imgproc.line(rgba, new Point(p1.x+top, p1.y + rows), new Point(p2.x+top, p2.y + rows), new Scalar(0, 255, 0), 2);
+//                } else if (slope > -2 && slope < -0.5) {
+//                    Imgproc.line(rgba, new Point(p1.x+top, p1.y + rows), new Point(p2.x+top, p2.y + rows), new Scalar(0, 255, 0), 2);
+//                }
+//
+//            } catch (Error e) {
+//                Log.e(TAG, "onCameraFrame: ", e);
+//            }
+//        }
+//
+//        Point pt1 = new Point(250, 20);
+//        Point pt2 = new Point(out.size().width - 250, 20);
+//        Point pt3 = new Point(50, out.size().height-25);
+//        Point pt4 = new Point(out.size().width-50, out.size().height-25);
 
-            } catch (Error e) {
-                Log.e(TAG, "onCameraFrame: ", e);
-            }
-        }
+//        Imgproc.circle(rgbaInnerWindow, pt1, 2, new Scalar(255, 0, 0), 5);
+//        Imgproc.circle(rgbaInnerWindow, pt2, 2, new Scalar(255, 0, 0), 5);
+//        Imgproc.circle(rgbaInnerWindow, pt3, 2, new Scalar(255, 0, 0), 5);
+//        Imgproc.circle(rgbaInnerWindow, pt4, 2, new Scalar(255, 0, 0), 5);
 
-        Point pt1 = new Point(250, 20);
-        Point pt2 = new Point(out.size().width - 250, 20);
-        Point pt3 = new Point(50, out.size().height-25);
-        Point pt4 = new Point(out.size().width-50, out.size().height-25);
-
-        Imgproc.circle(rgbaInnerWindow, pt1, 2, new Scalar(255, 0, 0), 5);
-        Imgproc.circle(rgbaInnerWindow, pt2, 2, new Scalar(255, 0, 0), 5);
-        Imgproc.circle(rgbaInnerWindow, pt3, 2, new Scalar(255, 0, 0), 5);
-        Imgproc.circle(rgbaInnerWindow, pt4, 2, new Scalar(255, 0, 0), 5);
-
-        MatOfPoint2f src = new MatOfPoint2f(
-                pt1, pt2, pt3, pt4);
-
-        MatOfPoint2f dst = new MatOfPoint2f(
-                new Point(0, 0),
-                new Point(600, 0),
-                new Point(0, 900),
-                new Point(600, 900));
+//        MatOfPoint2f src = new MatOfPoint2f(
+//                pt1, pt2, pt3, pt4);
+//
+//        MatOfPoint2f dst = new MatOfPoint2f(
+//                new Point(0, 0),
+//                new Point(600, 0),
+//                new Point(0, 900),
+//                new Point(600, 900));
 
 //        Mat warpMat = Imgproc.getPerspectiveTransform(src, dst);
 
@@ -284,7 +322,71 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
         rgbaInnerWindow.release();
 
-        return rgba;
+        return mNew;
+    }
+
+
+    public void splitRGBChannels(Mat rgb_split, Mat hsv_split, Mat hls_split) {
+        List<Mat> rgbChannels = new ArrayList<>();
+        List<Mat> hsvChannels = new ArrayList<>();
+        List<Mat> hlsChannels = new ArrayList<>();
+
+        Core.split(rgb_split, rgbChannels);
+        Core.split(hsv_split, hsvChannels);
+        Core.split(hls_split, hlsChannels);
+
+        rgbChannels.get(0).copyTo(mRed);
+        rgbChannels.get(1).copyTo(mGreen);
+        rgbChannels.get(2).copyTo(mBlue);
+
+        hsvChannels.get(0).copyTo(mHue_hsv);
+        hsvChannels.get(1).copyTo(mSat_hsv);
+        hsvChannels.get(2).copyTo(mVal_hsv);
+
+        hlsChannels.get(0).copyTo(mHue_hls);
+        hlsChannels.get(1).copyTo(mSat_hls);
+        hlsChannels.get(2).copyTo(mLight_hls);
+//
+//
+        for (int i = 0; i < rgbChannels.size(); i++){
+            rgbChannels.get(i).release();
+        }
+
+        for (int i = 0; i < hsvChannels.size(); i++){
+            hsvChannels.get(i).release();
+        }
+
+        for (int i = 0; i < hlsChannels.size(); i++){
+            hlsChannels.get(i).release();
+        }
+    }
+
+
+    public void applyThreshold() {
+        Core.inRange(mRed, new Scalar(225), new Scalar(255), mRed);
+        Core.inRange(mGreen, new Scalar(200), new Scalar(255), mGreen);
+
+        Core.bitwise_or(mRed, mGreen, mask);
+        Core.inRange(mBlue, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mHue_hsv, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mSat_hsv, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mVal_hsv, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mHue_hls, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mLight_hls, new Scalar(200), new Scalar(255), mBlue);
+        Core.inRange(mSat_hls, new Scalar(200), new Scalar(255), mBlue);
+    }
+
+
+    public void releaseAllMats() {
+        mRed.release();
+        mGreen.release();
+        mBlue.release();
+        mHue_hsv.release();
+        mSat_hsv.release();
+        mVal_hsv.release();
+        mHue_hls.release();
+        mLight_hls.release();
+        mSat_hls.release();
     }
 
 
