@@ -2,14 +2,11 @@ package ycc.androiddrivingassistant;
 
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Camera;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.os.Build;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -20,18 +17,13 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 
-import com.squareup.leakcanary.LeakCanary;
-
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.android.Utils;
 import org.opencv.core.Core;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
@@ -40,7 +32,6 @@ import org.opencv.imgproc.Imgproc;
 
 import java.io.FileOutputStream;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
@@ -174,16 +165,19 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     {
         rows = h;
         cols = w;
-        left = rows / 5;
+        left = rows / 6;
         width = cols - left;
         top = rows / 2.5;
 
+        mEdges = new Mat();
+        mCombined = new Mat();
         mIntermediateMat = new Mat();
         outY = new Mat();
         outW = new Mat();
         out = new Mat();
         hsv = new Mat();
         hls = new Mat();
+        gray = new Mat();
         mNew = new Mat();
         mask = new Mat();
         maskWhite = new Mat();
@@ -207,17 +201,23 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
 
-    private Scalar lowYellow = new Scalar(0, 100, 100), highYellow = new Scalar(50, 255, 255);
-    private Scalar lowWhite = new Scalar(0, 0, 200), highWhite = new Scalar(145, 60, 255);
     private Size ksize = new Size(5, 5);
     private double sigma = 3;
     private Point blurPt = new Point(3, 3);
 
     Mat mNew, mask, maskWhite, maskYellow;
+    Mat gray, mCombined;
     Mat mRed, mGreen, mBlue;
     Mat mHue_hsv, mSat_hsv, mVal_hsv;
     Mat mHue_hls, mSat_hls, mLight_hls;
 
+
+    /******************************************************************************************
+     * mRed, mGreen, mBlue, m-_hsv, m-_hls :  Mats of respective channels of ROI
+     * mCombined : combined mat of canny edges and mask for yellow and white
+     * hsv, hls, rgb : color space mats of ROI
+     *
+     ******************************************************************************************/
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         //System.gc();
@@ -228,10 +228,12 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         Imgproc.GaussianBlur(mRgba, mRgba, ksize, sigma);
 
         Mat rgbaInnerWindow;
-//        Mat lines = new Mat();
-        // rgbaInnerWindow & mIntermediateMat = ROI Mats
+        Mat lines = new Mat();
+        /* rgbaInnerWindow & mIntermediateMat = ROI Mats */
         rgbaInnerWindow = mRgba.submat((int)top, rows, left, width);
         rgbaInnerWindow.copyTo(rgba);
+        Imgproc.cvtColor(rgbaInnerWindow, gray, Imgproc.COLOR_RGB2GRAY);
+
 
         Imgproc.cvtColor(rgbaInnerWindow, hsv, Imgproc.COLOR_RGB2HSV);
         Imgproc.cvtColor(rgbaInnerWindow, hls, Imgproc.COLOR_RGB2HLS);
@@ -239,58 +241,19 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         splitRGBChannels(rgba, hsv, hls);
         applyThreshold();
 
-//        Core.inRange(hsv, lowYellow, highYellow, yellow);
-//        Core.inRange(hsv, lowWhite, highWhite, white);
-        Core.inRange(hsv, lowWhite, highWhite, maskWhite);
-        Core.inRange(hsv, lowYellow, highYellow, maskYellow);
-        Core.bitwise_or(maskWhite, maskYellow, mask);
-//        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outY, yellow);
-//        Core.bitwise_and(rgbaInnerWindow, rgbaInnerWindow, outW, white);
-//        Core.bitwise_and(rgbaInnerWindow, mask, rgbaInnerWindow);
-//        Core.add(outW, outY, out);
+        Imgproc.Canny(mask, mEdges, 50, 150);
 
-        maskWhite.release();
-        maskYellow.release();
-        outW.release();
-        outY.release();
-
-        Imgproc.erode(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2,2)));
-
-        Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2, 2)));
-
-//        Core.bitwise_and(mGray, mask, rgba);
-//        Imgproc.Canny(mask, rgbaInnerWindow, 100, 200);
-
-        Imgproc.resize(mSat_hls, mNew, new Size(imgWidth, imgHeight));
+        Imgproc.erode(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
+        Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
 
 //        Imgproc.cvtColor(rgbaInnerWindow, rgbaInnerWindow, Imgproc.COLOR_GRAY2RGBA);
-//        Imgproc.HoughLinesP(rgbaInnerWindow, lines, 1, Math.PI/180, 50, 50, 50);
-//
-//        for (int i=0; i<lines.rows(); i++) {
-//            double[] points = lines.get(i, 0);
-//            double x1, y1, x2, y2;
-//
-//            try {
-//                x1 = points[0];
-//                y1 = points[1];
-//                x2 = points[2];
-//                y2 = points[3];
-//
-//                Point p1 = new Point(x1, y1);
-//                Point p2 = new Point(x2, y2);
-//
-//                float slope = (float)(p2.y - p1.y) / (float)(p2.x - p1.x);
-//                if (slope > 0.5 && slope < 2 ) {
-//                    Imgproc.line(rgba, new Point(p1.x+top, p1.y + rows), new Point(p2.x+top, p2.y + rows), new Scalar(0, 255, 0), 2);
-//                } else if (slope > -2 && slope < -0.5) {
-//                    Imgproc.line(rgba, new Point(p1.x+top, p1.y + rows), new Point(p2.x+top, p2.y + rows), new Scalar(0, 255, 0), 2);
-//                }
-//
-//            } catch (Error e) {
-//                Log.e(TAG, "onCameraFrame: ", e);
-//            }
-//        }
-//
+        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 110, 50);
+
+        if (lines.rows() > 0) {
+            getAverageSlopes(lines);
+        }
+
+        Imgproc.resize(mEdges, mNew, new Size(imgWidth, imgHeight));
 //        Point pt1 = new Point(250, 20);
 //        Point pt2 = new Point(out.size().width - 250, 20);
 //        Point pt3 = new Point(50, out.size().height-25);
@@ -321,8 +284,9 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 //        Utils.matToBitmap(dstImage, bmp);
 
         rgbaInnerWindow.release();
-
-        return mNew;
+        Imgproc.circle(mRgba, new Point(left, top), 2, new Scalar(255, 255, 255), 4);
+        Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, rows), new Scalar(0, 255, 0), 2);
+        return mRgba;
     }
 
 
@@ -363,17 +327,92 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
 
     public void applyThreshold() {
-        Core.inRange(mRed, new Scalar(225), new Scalar(255), mRed);
-        Core.inRange(mGreen, new Scalar(200), new Scalar(255), mGreen);
+        Core.inRange(mRed, new Scalar(210), new Scalar(255), mRed);
+//        Core.inRange(mGreen, new Scalar(225), new Scalar(255), mGreen);
+//        Core.inRange(mBlue, new Scalar(200), new Scalar(255), mBlue);
 
-        Core.bitwise_or(mRed, mGreen, mask);
-        Core.inRange(mBlue, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mHue_hsv, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mSat_hsv, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mVal_hsv, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mHue_hls, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mLight_hls, new Scalar(200), new Scalar(255), mBlue);
-        Core.inRange(mSat_hls, new Scalar(200), new Scalar(255), mBlue);
+//        Core.inRange(mHue_hsv, new Scalar(200), new Scalar(255), mHue_hsv);
+//        Core.inRange(mSat_hsv, new Scalar(200), new Scalar(255), mSat_hsv);
+        Core.inRange(mVal_hsv, new Scalar(210), new Scalar(255), mVal_hsv);
+
+//        Core.inRange(mHue_hls, new Scalar(200), new Scalar(255), mHue_hls);
+//        Core.inRange(mLight_hls, new Scalar(200), new Scalar(255), mLight_hls);
+//        Core.inRange(mSat_hls, new Scalar(200), new Scalar(255), mSat_hls);
+
+        Core.bitwise_and(mRed, mVal_hsv, mask);
+    }
+
+
+    public void getAverageSlopes(Mat lines) {
+        List<Double> left_slopes = new ArrayList<>();
+        List<Double> right_slopes = new ArrayList<>();
+        List<Double> left_y_intercept = new ArrayList<>();
+        List<Double> right_y_intercept = new ArrayList<>();
+
+        for (int i=0; i<lines.rows(); i++) {
+            double[] points = lines.get(i, 0);
+            double x1, y1, x2, y2;
+
+            try {
+                x1 = points[0];
+                y1 = points[1];
+                x2 = points[2];
+                y2 = points[3];
+
+                Point p1 = new Point(x1, y1);
+                Point p2 = new Point(x2, y2);
+
+                double slope = (p2.y - p1.y) / (p2.x - p1.x);
+                double y_intercept = 0;
+
+                if (slope > 0.5 && slope < 2 ) { // Right lane
+                    right_slopes.add(slope);
+                    y_intercept = p1.y - (p1.x*slope);
+                    right_y_intercept.add(y_intercept);
+                }
+                else if (slope > -2 && slope < -0.5) { // Left lane
+                    left_slopes.add(slope);
+                    y_intercept = p1.y - (p1.x*slope);
+                    left_y_intercept.add(y_intercept);
+                }
+
+            } catch (Error e) {
+                Log.e(TAG, "onCameraFrame: ", e);
+            }
+        }
+
+        double avg_left_slope = 0;
+        double avg_right_slope = 0;
+        double avg_left_y_intercept = 0;
+        double avg_right_y_intercept = 0;
+
+        for (int i=0; i< right_slopes.size(); i++) {
+            avg_right_slope += right_slopes.get(i);
+            avg_right_y_intercept += right_y_intercept.get(i);
+        }
+        avg_right_slope /= right_slopes.size();
+        avg_right_y_intercept /= right_y_intercept.size();
+
+        for (int i=0; i< left_slopes.size(); i++) {
+            avg_left_slope += left_slopes.get(i);
+            avg_left_y_intercept += left_y_intercept.get(i);
+        }
+        avg_left_slope /= left_slopes.size();
+        avg_left_y_intercept /= left_y_intercept.size();
+
+        //x = (y-b)/m
+        //y = xm + b
+        double newLeftTopX = 0;
+        double newRightTopX = (0 - avg_right_y_intercept)/avg_right_slope;
+
+        Point rightLanePt = new Point((1000 - avg_right_y_intercept)/avg_right_slope,1000);
+        Point leftLanePt = new Point();
+        Point leftLanePt2 = new Point();
+        Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
+
+        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 0), 5);
+        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 255), 5);
+        Imgproc.line(mRgba, new Point(rightLanePt.x+left,rightLanePt.y+top), new Point(newRightTopX+left,0+top), new Scalar(255, 0, 255), 5);
     }
 
 
