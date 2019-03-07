@@ -402,16 +402,16 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
         //x = (y-b)/m
         //y = xm + b
-        double newLeftTopX = 0;
+        double newLeftTopX = (-avg_left_y_intercept)/avg_left_slope;
         double newRightTopX = (0 - avg_right_y_intercept)/avg_right_slope;
 
         Point rightLanePt = new Point((1000 - avg_right_y_intercept)/avg_right_slope,1000);
-        Point leftLanePt = new Point();
+        Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
         Point leftLanePt2 = new Point();
         Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
 
-        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 0), 5);
-        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 255), 5);
+        Imgproc.line(mRgba, new Point(newLeftTopX+left, 0+top), new Point(leftLanePt.x, leftLanePt.y+top), new Scalar(0, 255, 255), 5);
+//        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 0), 5);
         Imgproc.line(mRgba, new Point(rightLanePt.x+left,rightLanePt.y+top), new Point(newRightTopX+left,0+top), new Scalar(255, 0, 255), 5);
     }
 
