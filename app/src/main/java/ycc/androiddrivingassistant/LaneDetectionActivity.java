@@ -50,7 +50,7 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     private Mat mIntermediateMat;
 
     int rows, cols, left, width;
-    double top;
+    double top, middleX, bottomY;
 
     Bitmap bmp;
 
@@ -146,6 +146,7 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
             javaCameraView.disableView();
     }
 
+
     @Override
     protected  void onResume() {
         super.onResume();
@@ -160,14 +161,25 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         setFullscreen();
     }
 
+    double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
+
     @Override
     public void onCameraViewStarted(int w, int h)
     {
         rows = h;
         cols = w;
-        left = rows / 6;
+        left = rows / 8;
         width = cols - left;
         top = rows / 2.5;
+        middleX = w /2;
+        bottomY = h;
+
+        vehicleCenterX1 = middleX;
+        vehicleCenterX2 = middleX;
+        vehicleCenterY1 = bottomY-(rows/7);
+        vehicleCenterY2 = bottomY-(rows/20);
+        laneCenterX = 0;
+        laneCenterY = (bottomY-(rows/7) + bottomY-(rows/20)) / 2;
 
         mEdges = new Mat();
         mCombined = new Mat();
@@ -233,27 +245,22 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         rgbaInnerWindow = mRgba.submat((int)top, rows, left, width);
         rgbaInnerWindow.copyTo(rgba);
         Imgproc.cvtColor(rgbaInnerWindow, gray, Imgproc.COLOR_RGB2GRAY);
-
-
         Imgproc.cvtColor(rgbaInnerWindow, hsv, Imgproc.COLOR_RGB2HSV);
         Imgproc.cvtColor(rgbaInnerWindow, hls, Imgproc.COLOR_RGB2HLS);
 
         splitRGBChannels(rgba, hsv, hls);
         applyThreshold();
-
-        Imgproc.Canny(mask, mEdges, 50, 150);
-
         Imgproc.erode(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
         Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
+        Imgproc.Canny(mask, mEdges, 50, 150);
 
-//        Imgproc.cvtColor(rgbaInnerWindow, rgbaInnerWindow, Imgproc.COLOR_GRAY2RGBA);
+        Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
         Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 110, 50);
-
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
 
-        Imgproc.resize(mEdges, mNew, new Size(imgWidth, imgHeight));
+        Imgproc.resize(mask, mNew, new Size(imgWidth, imgHeight));
 //        Point pt1 = new Point(250, 20);
 //        Point pt2 = new Point(out.size().width - 250, 20);
 //        Point pt3 = new Point(50, out.size().height-25);
@@ -284,7 +291,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 //        Utils.matToBitmap(dstImage, bmp);
 
         rgbaInnerWindow.release();
-        Imgproc.circle(mRgba, new Point(left, top), 2, new Scalar(255, 255, 255), 4);
         Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, rows), new Scalar(0, 255, 0), 2);
         return mRgba;
     }
@@ -405,14 +411,23 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         double newLeftTopX = (-avg_left_y_intercept)/avg_left_slope;
         double newRightTopX = (0 - avg_right_y_intercept)/avg_right_slope;
 
-        Point rightLanePt = new Point((1000 - avg_right_y_intercept)/avg_right_slope,1000);
+        Point rightLanePt = new Point((imgHeight - avg_right_y_intercept)/avg_right_slope, imgHeight);
         Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
-        Point leftLanePt2 = new Point();
         Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
 
-        Imgproc.line(mRgba, new Point(newLeftTopX+left, 0+top), new Point(leftLanePt.x, leftLanePt.y+top), new Scalar(0, 255, 255), 5);
-//        Imgproc.line(mRgba, new Point(), new Point(), new Scalar(0, 255, 0), 5);
-        Imgproc.line(mRgba, new Point(rightLanePt.x+left,rightLanePt.y+top), new Point(newRightTopX+left,0+top), new Scalar(255, 0, 255), 5);
+        if (left_slopes.size() != 0) {
+            Imgproc.line(mRgba, new Point(newLeftTopX + left, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(0, 255, 255), 5);
+        }
+        if (right_slopes.size() != 0) {
+            Imgproc.line(mRgba, new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(newRightTopX + left, 0 + top), new Scalar(255, 0, 255), 5);
+        }
+        if (right_slopes.size() != 0 && left_slopes.size() != 0) {
+            double laneCenterX1 = (laneCenterY-top-avg_left_y_intercept)/avg_left_slope + left;
+            double laneCenterX2 = (laneCenterY-top-avg_right_y_intercept)/avg_right_slope + left;
+            laneCenterX = (laneCenterX1+laneCenterX2) / 2;
+            Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), new Scalar(0, 155, 0), 2, 8);
+            Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 6);
+        }
     }
 
 
