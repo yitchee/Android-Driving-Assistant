@@ -76,7 +76,7 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     {
         super.onCreate(savedInstanceState);
         //Check if permission is already granted
-        //thisActivity is your activity. (e.g.: MainActivity.this)
+        //thisActivity is your activity. (e.g.: SignDetectionActivity.this)
         if (ContextCompat.checkSelfPermission(getApplicationContext(),
                 Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
