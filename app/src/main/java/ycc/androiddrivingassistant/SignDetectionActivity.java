@@ -1,16 +1,19 @@
 package ycc.androiddrivingassistant;
 
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -79,9 +82,16 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
-        setFullscreen();
+        //Check if permission is already granted
+        if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {}
+            else {
+                // No explanation needed, we can request the permission.
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
+            }
+        }
+        setContentView(R.layout.activity_sign_detection);
 
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
@@ -302,6 +312,12 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
     UiRunnable uiRunnable = new UiRunnable();
+
+    public void changeActivity(View v) {
+        Intent intent = new Intent(getApplicationContext(), LaneDetectionActivity.class);
+        startActivity(intent);
+        finish();
+    }
 
     public void setFullscreen() {
         this.getWindow().getDecorView().setSystemUiVisibility(
