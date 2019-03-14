@@ -4,23 +4,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".LaneDetectionActivity"
-    tools:layout_editor_absoluteY="73dp">
+    tools:context=".LaneDetectionActivity">
 
     <org.opencv.android.JavaCameraView
         android:id="@+id/java_camera_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-
-    <android.support.v7.widget.AppCompatImageView
-        android:id="@+id/button"
-        android:layout_width="100dp"
-        android:layout_height="50dp"
-        android:onClick="onClickBtn"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_alignParentStart="true"
-        android:layout_margin="5dp"
-        android:src="#ffffff" />
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Change"
+        android:onClick="changeActivity"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_alignParentStart="true"/>
 
 </android.support.constraint.ConstraintLayout>

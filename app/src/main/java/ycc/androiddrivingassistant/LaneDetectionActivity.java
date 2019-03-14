@@ -3,6 +3,7 @@ package ycc.androiddrivingassistant;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
@@ -75,23 +76,13 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
-        //Check if permission is already granted
-        //thisActivity is your activity. (e.g.: MainActivity.this)
-        if (ContextCompat.checkSelfPermission(getApplicationContext(),
-                Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
 
-            // Give first an explanation, if needed.
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.CAMERA)) {
-                // Show an explanation to the user *asynchronously* -- don't block
-                // this thread waiting for the user's response! After the user
-                // sees the explanation, try again to request the permission.
-            } else {
+        //Check if permission is already granted
+        if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {}
+            else {
                 // No explanation needed, we can request the permission.
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.CAMERA},
-                        1);
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
             }
         }
 
@@ -444,19 +435,10 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
 
-    public void  onClickBtn(View v) {
-        Random generator = new Random();
-        int n = 10000;
-        n = generator.nextInt();
-        try {
-            FileOutputStream fout = new FileOutputStream(Environment.getExternalStorageDirectory().toString() + "/image" + n + ".png");
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, fout);
-            bmp.recycle();
-            fout.flush();
-            fout.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    public void changeActivity(View v) {
+        Intent intent = new Intent(getApplicationContext(), SignDetectionActivity.class);
+        startActivity(intent);
+        finish();
     }
 
 

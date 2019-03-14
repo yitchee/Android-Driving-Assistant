@@ -28,7 +28,5 @@ dependencies {
     implementation project(':openCVLibrary343')
     implementation 'com.android.support:design:27.1.1'
 
-    debugImplementation 'com.squareup.leakcanary:leakcanary-android:1.6.3'
-    releaseImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.6.3'
-    testImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.6.3'
+    implementation 'com.google.android.gms:play-services-vision:17.0.2'
 }
