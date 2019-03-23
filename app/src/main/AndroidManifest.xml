@@ -3,10 +3,11 @@
     package="ycc.androiddrivingassistant">
 
     <uses-permission android:name="android.permission.CAMERA" />
-        <uses-feature android:name="android.hardware.camera"/>
-        <uses-feature android:name="android.hardware.camera.autofocus"/>
-        <uses-feature android:name="android.hardware.camera.front"/>
-        <uses-feature android:name="android.hardware.camera.front.autofocus"/>
+
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <uses-feature android:name="android.hardware.camera.front" />
+    <uses-feature android:name="android.hardware.camera.front.autofocus" />
 
     <application
         android:allowBackup="true"
@@ -18,23 +19,36 @@
         <activity
             android:name=".SignDetectionActivity"
             android:screenOrientation="landscape">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity android:name=".LaneDetectionActivity"
-            android:screenOrientation="landscape">
             <!--<intent-filter>-->
                 <!--<action android:name="android.intent.action.MAIN" />-->
-
                 <!--<category android:name="android.intent.category.LAUNCHER" />-->
             <!--</intent-filter>-->
         </activity>
+        <activity
+            android:name=".LaneDetectionActivity"
+            android:screenOrientation="landscape">
 
-        <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES"
-            android:value="ocr" />
+             <!--<intent-filter> -->
+                 <!--<action android:name="android.intent.action.MAIN" /> -->
+                 <!--<category android:name="android.intent.category.LAUNCHER" /> -->
+             <!--</intent-filter> -->
+        </activity>
+
+
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="landscape">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <meta-data
+        android:name="com.google.android.gms.vision.DEPENDENCIES"
+        android:value="ocr" />
+
     </application>
 
 </manifest>

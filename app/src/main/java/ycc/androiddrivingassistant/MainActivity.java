@@ -1,27 +1,38 @@
 package ycc.androiddrivingassistant;
 
-
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
+import android.widget.Toast;
+
+import com.google.android.gms.vision.Frame;
+import com.google.android.gms.vision.text.TextBlock;
+import com.google.android.gms.vision.text.TextRecognizer;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
@@ -35,22 +46,27 @@ import java.util.List;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
 
-import android.hardware.camera2.*;
+public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
 
-public class LaneDetectionActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
-
-    private static final String TAG = "LaneDetectionActivity";
+    private static final String TAG = "MainActivity";
     JavaCameraView javaCameraView;
-    Mat mRgba, rgba, mGray, mCopy, mEdges;
-    Mat outY, outW, out, hsv, hls;
-    Rect roi;
-    int imgWidth=1920, imgHeight=1080;
-    private Mat mIntermediateMat;
+    TextRecognizer textRecognizer;
+    ImageView signImageView;
 
+    Mat mRgba, mGray, circles;
+    Mat mRed, mGreen, mBlue, mHue_hsv, mSat_hsv, mVal_hsv, mHue_hls, mSat_hls, mLight_hls;
+    Mat hsv, hls, rgba, gray;
+    Mat mNew, mask, mEdges;
+    Rect signRegion;
+
+    Bitmap bm;
+    Boolean newSignFlag = false;
+
+    int imgWidth=1920, imgHeight=1080;
     int rows, cols, left, width;
     double top, middleX, bottomY;
 
-    Bitmap bmp;
+    double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -70,9 +86,9 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState)
-    {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
         //Check if permission is already granted
         if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -92,14 +108,12 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
             assert map != null;
 
             for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
-                Log.i(TAG, "imageDimension " + size);
                 float ratio = (float)size.getWidth() / (float)size.getHeight();
                 if (ratio >= 1.3 && size.getWidth() < 900) {
                     imgHeight = size.getHeight();
                     imgWidth = size.getWidth();
                     break;
                 }
-                Log.i(TAG, "ratio: " + ratio);
             }
         }catch (Error error) {
             Log.e(TAG, "onCreate: ", error);
@@ -107,53 +121,32 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
             e.printStackTrace();
         }
 
+        textRecognizer = new TextRecognizer.Builder(this).build();
+        if (!textRecognizer.isOperational()) {
+            Log.w(TAG, "Detector dependencies are not yet available.");
+
+            IntentFilter lowStorageFilter = new IntentFilter(Intent.ACTION_DEVICE_STORAGE_LOW);
+            boolean hasLowStorage = registerReceiver(null, lowStorageFilter) != null;
+
+            if (hasLowStorage) {
+                Toast.makeText(this,"Low Storage: Speed Limit detection will not work.", Toast.LENGTH_LONG).show();
+                Log.w(TAG, "Low Storage");
+            }
+        }
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setContentView(R.layout.activity_lane_detection);
 
         javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
-
 //        javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
 
-        Log.i(TAG, "ThreadInfo: " + Thread.currentThread());
+        signImageView = (ImageView) findViewById(R.id.sign_image_view);
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        if (javaCameraView != null)
-            javaCameraView.disableView();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (javaCameraView != null)
-            javaCameraView.disableView();
-    }
-
-
-    @Override
-    protected  void onResume() {
-        super.onResume();
-        if (OpenCVLoader.initDebug()) {
-            Log.d(TAG, "OpenCV initialize success");
-            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
-        }
-        else {
-            Log.d(TAG, "OpenCV initialize failed");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
-        }
-        setFullscreen();
-    }
-
-    double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
-
-    @Override
-    public void onCameraViewStarted(int w, int h)
-    {
+    public void onCameraViewStarted(int w, int h) {
         rows = h;
         cols = w;
         left = rows / 8;
@@ -169,62 +162,55 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         laneCenterX = 0;
         laneCenterY = (bottomY-(rows/7) + bottomY-(rows/20)) / 2;
 
-        mEdges = new Mat();
-        mCombined = new Mat();
-        mIntermediateMat = new Mat();
-        outY = new Mat();
-        outW = new Mat();
-        out = new Mat();
+        mRgba = new Mat();
+        mGray = new Mat();
+
+        circles = new Mat();
+        mRed = new Mat();
+        mGreen = new Mat();
+        mBlue = new Mat();
+        mHue_hls = new Mat();
+        mLight_hls = new Mat();
+        mSat_hls = new Mat();
+        mHue_hsv = new Mat();
+        mSat_hsv = new Mat();
+        mVal_hsv = new Mat();
+
         hsv = new Mat();
         hls = new Mat();
         gray = new Mat();
+        rgba = new Mat();
+
         mNew = new Mat();
         mask = new Mat();
-        maskWhite = new Mat();
-        maskYellow = new Mat();
-        mGray = new Mat();
-        mRgba = new Mat();
-        rgba = new Mat();
-        mRed = new Mat(); mGreen = new Mat(); mBlue = new Mat();
-        mHue_hsv = new Mat(); mSat_hsv = new Mat(); mVal_hsv = new Mat();
-        mHue_hls = new Mat(); mSat_hls = new Mat(); mLight_hls = new Mat();
+        mEdges = new Mat();
     }
 
     @Override
-    public void onCameraViewStopped()
-    {
-        // Explicitly deallocate Mats
-        if (mIntermediateMat != null)
-            mIntermediateMat.release();
-
-        mIntermediateMat = null;
+    public void onCameraViewStopped() {
+        mRgba.release();
+        mGray.release();
+        circles.release();
+        mRed.release();
+        mGreen.release();
+        mBlue.release();
     }
-
 
     private Size ksize = new Size(5, 5);
     private double sigma = 3;
     private Point blurPt = new Point(3, 3);
 
-    Mat mNew, mask, maskWhite, maskYellow;
-    Mat gray, mCombined;
-    Mat mRed, mGreen, mBlue;
-    Mat mHue_hsv, mSat_hsv, mVal_hsv;
-    Mat mHue_hls, mSat_hls, mLight_hls;
-
-
     /******************************************************************************************
      * mRed, mGreen, mBlue, m-_hsv, m-_hls :  Mats of respective channels of ROI
      * mCombined : combined mat of canny edges and mask for yellow and white
      * hsv, hls, rgb : color space mats of ROI
-     *
      ******************************************************************************************/
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        //System.gc();
-
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
+        Imgproc.blur(mGray, mGray, new Size(5, 5), new Point(2, 2));
         Imgproc.GaussianBlur(mRgba, mRgba, ksize, sigma);
 
         Mat rgbaInnerWindow;
@@ -242,47 +228,72 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
         Imgproc.Canny(mask, mEdges, 50, 150);
 
+        Imgproc.resize(mask, mNew, new Size(imgWidth, imgHeight));
+        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 100);
+
+        if (circles.cols() > 0) {
+            for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
+                double circleVec[] = circles.get(0, x);
+
+                if (circleVec == null) {
+                    break;
+                }
+
+                Point center = new Point((int) circleVec[0], (int) circleVec[1]);
+                int radius = 1;
+                radius = (int) circleVec[2];
+
+                int val = (radius*2) + 20;
+                // defines the ROI
+                signRegion = new Rect((int) (center.x - radius - 10), (int) (center.y - radius - 10), val, val);
+
+                if (!newSignFlag) {
+                    analyzeObject(inputFrame.rgba(), signRegion, radius);
+                }
+//                Log.i(TAG, "onCreate: " + Math.abs(radius*2));
+            }
+        }
+
+        circles.release();
+
         Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
         Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 110, 50);
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
 
-        Imgproc.resize(mask, mNew, new Size(imgWidth, imgHeight));
-//        Point pt1 = new Point(250, 20);
-//        Point pt2 = new Point(out.size().width - 250, 20);
-//        Point pt3 = new Point(50, out.size().height-25);
-//        Point pt4 = new Point(out.size().width-50, out.size().height-25);
-
-//        Imgproc.circle(rgbaInnerWindow, pt1, 2, new Scalar(255, 0, 0), 5);
-//        Imgproc.circle(rgbaInnerWindow, pt2, 2, new Scalar(255, 0, 0), 5);
-//        Imgproc.circle(rgbaInnerWindow, pt3, 2, new Scalar(255, 0, 0), 5);
-//        Imgproc.circle(rgbaInnerWindow, pt4, 2, new Scalar(255, 0, 0), 5);
-
-//        MatOfPoint2f src = new MatOfPoint2f(
-//                pt1, pt2, pt3, pt4);
-//
-//        MatOfPoint2f dst = new MatOfPoint2f(
-//                new Point(0, 0),
-//                new Point(600, 0),
-//                new Point(0, 900),
-//                new Point(600, 900));
-
-//        Mat warpMat = Imgproc.getPerspectiveTransform(src, dst);
-
-//        Mat dstImage = new Mat();
-
-//        Imgproc.warpPerspective(rgbaInnerWindow, dstImage, warpMat, new Size(600, 900));
-//        Imgproc.warpPerspective(rgbaInnerWindow, dstImage, warpMat, new Size(600, 900), Imgproc.CV_WARP_INVERSE_MAP);
-
-//        bmp = Bitmap.createBitmap(600, 900, Bitmap.Config.ARGB_8888);
-//        Utils.matToBitmap(dstImage, bmp);
-
         rgbaInnerWindow.release();
         Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, rows), new Scalar(0, 255, 0), 2);
         return mRgba;
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (javaCameraView != null)
+            javaCameraView.disableView();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (javaCameraView != null)
+            javaCameraView.disableView();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (OpenCVLoader.initDebug()) {
+            Log.d(TAG, "OpenCV initialize success");
+            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+        }
+        else {
+            Log.d(TAG, "OpenCV initialize failed");
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
+        }
+        setFullscreen();
+    }
 
     public void splitRGBChannels(Mat rgb_split, Mat hsv_split, Mat hls_split) {
         List<Mat> rgbChannels = new ArrayList<>();
@@ -319,7 +330,6 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         }
     }
 
-
     public void applyThreshold() {
         Core.inRange(mRed, new Scalar(210), new Scalar(255), mRed);
 //        Core.inRange(mGreen, new Scalar(225), new Scalar(255), mGreen);
@@ -336,6 +346,68 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         Core.bitwise_and(mRed, mVal_hsv, mask);
     }
 
+    String signValue = "";
+    Boolean isRunning = false;
+
+    public void analyzeObject(final Mat img, final Rect roi, final int radius) {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                isRunning = true;
+                Mat copy;
+                try {
+                    copy = new Mat(img, roi);
+                    // Creates a bitmap with size of detected circle and stores the Mat into it
+                    bm = Bitmap.createBitmap(Math.abs((radius * 2) + 20), Math.abs((radius * 2) + 20), Bitmap.Config.ARGB_8888);
+                    Utils.matToBitmap(copy, bm);
+                } catch (Exception e) {
+                    bm = null;
+                    Log.e(TAG, "run: ", e);
+                }
+
+                if (bm != null) {
+                    Frame imageFrame = new Frame.Builder().setBitmap(bm).build();
+                    SparseArray<TextBlock> textBlocks = textRecognizer.detect(imageFrame);
+
+                    for (int i = 0; i < textBlocks.size(); i++) {
+                        TextBlock textBlock = textBlocks.get(textBlocks.keyAt(i));
+
+                        if (!signValue.equals(textBlock.getValue())) {
+                            signValue = textBlock.getValue();
+                            setUISign(signValue);
+                        }
+                    }
+                }
+                isRunning = false;
+            }
+        };
+
+        if (!isRunning) {
+            Thread textDetectionThread = new Thread(runnable);
+            textDetectionThread.run();
+        }
+    }
+
+    public void setUISign(String val) {
+        uiRunnable.setSignImageView(signImageView);
+
+        if (val.contains("60")) {
+            uiRunnable.setSignVal(60);
+        } else if (val.contains("80")) {
+            uiRunnable.setSignVal(80);
+        } else if (val.contains("100")) {
+            uiRunnable.setSignVal(100);
+        } else if (val.contains("50")) {
+            uiRunnable.setSignVal(50);
+        } else if (val.contains("120")) {
+            uiRunnable.setSignVal(120);
+        } else if (val.contains("30")) {
+            uiRunnable.setSignVal(30);
+        }
+        runOnUiThread(uiRunnable);
+    }
+
+    UiRunnable uiRunnable = new UiRunnable();
 
     public void getAverageSlopes(Mat lines) {
         List<Double> left_slopes = new ArrayList<>();
@@ -401,7 +473,7 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
 
         Point rightLanePt = new Point((imgHeight - avg_right_y_intercept)/avg_right_slope, imgHeight);
         Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
-        Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
+//        Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
 
         if (left_slopes.size() != 0) {
             Imgproc.line(mRgba, new Point(newLeftTopX + left, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(0, 255, 255), 5);
@@ -418,30 +490,8 @@ public class LaneDetectionActivity extends AppCompatActivity implements CameraBr
         }
     }
 
-
-    public void releaseAllMats() {
-        mRed.release();
-        mGreen.release();
-        mBlue.release();
-        mHue_hsv.release();
-        mSat_hsv.release();
-        mVal_hsv.release();
-        mHue_hls.release();
-        mLight_hls.release();
-        mSat_hls.release();
-    }
-
-
-    public void changeActivity(View v) {
-        Intent intent = new Intent(getApplicationContext(), SignDetectionActivity.class);
-        startActivity(intent);
-        finish();
-    }
-
-
     @Override
-    public void setFullscreen()
-    {
+    public void setFullscreen() {
         this.getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                         | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION

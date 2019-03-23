@@ -54,7 +54,6 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
     ImageView signImageView;
     Mat mGray, imgCopy;
     Mat circles;
-    Mat signCopy;
     Rect signRegion;
     Bitmap bm;
     Boolean newSignFlag = false;
@@ -154,7 +153,7 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
     @Override
-    protected  void onResume() {
+    protected void onResume() {
         super.onResume();
         if (OpenCVLoader.initDebug()) {
             Log.d(TAG, "OpenCV initialize success");
@@ -173,7 +172,6 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
         mGray  = new Mat();
         imgCopy = new Mat();
         circles = new Mat();
-        signCopy = new Mat();
         mRed = new Mat();
         mGreen = new Mat();
         mBlue = new Mat();
@@ -184,7 +182,6 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
         mGray.release();
         imgCopy.release();
         circles.release();
-        signCopy.release();
     }
 
     @Override
@@ -223,7 +220,6 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
         }
 
         circles.release();
-        signCopy.release();
         return inputFrame.rgba();
     }
 
@@ -306,7 +302,6 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
             uiRunnable.setSignVal(120);
         } else if (val.contains("30")) {
             uiRunnable.setSignVal(30);
-        } else {
         }
         runOnUiThread(uiRunnable);
     }

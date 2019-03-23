@@ -8,6 +8,7 @@ public class UiRunnable implements Runnable {
     private ImageView signImageView;
 
     UiRunnable() {
+        setSignVal(0);
     }
 
     UiRunnable(int val, ImageView imageView) {
