@@ -11,6 +11,7 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.speech.tts.TextToSpeech;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -43,10 +44,11 @@ import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
+public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener {
 
     private static final String TAG = "MainActivity";
     JavaCameraView javaCameraView;
@@ -68,6 +70,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
+    TextToSpeech tts;
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -134,6 +137,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             }
         }
 
+        tts = new TextToSpeech(this, this);
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
@@ -143,6 +148,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
 
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
+        uiRunnable.setSignImageView(signImageView);
     }
 
     @Override
@@ -346,6 +352,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Core.bitwise_and(mRed, mVal_hsv, mask);
     }
 
+    int curSpeedVal = 0;
     String signValue = "";
     Boolean isRunning = false;
 
@@ -389,20 +396,29 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     public void setUISign(String val) {
-        uiRunnable.setSignImageView(signImageView);
-
+        curSpeedVal = uiRunnable.getCurVal();
         if (val.contains("60")) {
             uiRunnable.setSignVal(60);
+            uiRunnable.setCurVal(60);
         } else if (val.contains("80")) {
             uiRunnable.setSignVal(80);
+            uiRunnable.setCurVal(80);
         } else if (val.contains("100")) {
             uiRunnable.setSignVal(100);
+            uiRunnable.setCurVal(100);
         } else if (val.contains("50")) {
             uiRunnable.setSignVal(50);
+            uiRunnable.setCurVal(50);
         } else if (val.contains("120")) {
             uiRunnable.setSignVal(120);
+            uiRunnable.setCurVal(120);
         } else if (val.contains("30")) {
             uiRunnable.setSignVal(30);
+            uiRunnable.setCurVal(30);
+        }
+        Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + uiRunnable.getCurVal());
+        if (curSpeedVal != uiRunnable.getCurVal()) {
+            tts.speak(uiRunnable.getCurVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
         }
         runOnUiThread(uiRunnable);
     }
@@ -499,5 +515,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    @Override
+    public void onInit(int status) {
+        tts.setLanguage(Locale.ENGLISH);
     }
 }

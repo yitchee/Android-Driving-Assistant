@@ -4,28 +4,17 @@ import android.util.Log;
 import android.widget.ImageView;
 
 public class UiRunnable implements Runnable {
-    private int signVal;
+    private int signVal, curVal;
     private ImageView signImageView;
 
     UiRunnable() {
-        setSignVal(0);
+        signVal = 0;
+        curVal = 0;
     }
 
     UiRunnable(int val, ImageView imageView) {
         setSignVal(val);
         setSignImageView(imageView);
-    }
-
-    public int getSignVal() {
-        return signVal;
-    }
-
-    public void setSignVal(int signVal) {
-        this.signVal = signVal;
-    }
-
-    public void setSignImageView(ImageView signImageView) {
-        this.signImageView = signImageView;
     }
 
     @Override
@@ -64,5 +53,25 @@ public class UiRunnable implements Runnable {
         } catch (Exception e) {
             //Log.e(TAG, "onCreate: " + e);
         }
+    }
+
+    public int getSignVal() {
+        return signVal;
+    }
+
+    public void setSignVal(int signVal) {
+        this.signVal = signVal;
+    }
+
+    public void setSignImageView(ImageView signImageView) {
+        this.signImageView = signImageView;
+    }
+
+    public int getCurVal() {
+        return curVal;
+    }
+
+    public void setCurVal(int curVal) {
+        this.curVal = curVal;
     }
 }
