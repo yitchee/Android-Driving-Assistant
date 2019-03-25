@@ -1,9 +1,11 @@
 package ycc.androiddrivingassistant;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
@@ -11,6 +13,9 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.speech.tts.TextToSpeech;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -48,7 +53,7 @@ import java.util.Locale;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener {
+public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener, LocationListener {
 
     private static final String TAG = "MainActivity";
     JavaCameraView javaCameraView;
@@ -71,6 +76,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
     TextToSpeech tts;
+    SharedPreferences sharedpreferences;
+
+    LocationManager locationManager;
+    Location prevLoc;
+    long prevTime;
+
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -93,36 +104,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        //Check if permission is already granted
-        if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {}
-            else {
-                // No explanation needed, we can request the permission.
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
-            }
-        }
-
-        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        try {
-            assert manager != null;
-            String cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            assert map != null;
-
-            for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
-                float ratio = (float)size.getWidth() / (float)size.getHeight();
-                if (ratio >= 1.3 && size.getWidth() < 900) {
-                    imgHeight = size.getHeight();
-                    imgWidth = size.getWidth();
-                    break;
-                }
-            }
-        }catch (Error error) {
-            Log.e(TAG, "onCreate: ", error);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
+        setUpCameraServices();
+        setUpLocationServices();
 
         textRecognizer = new TextRecognizer.Builder(this).build();
         if (!textRecognizer.isOperational()) {
@@ -144,11 +127,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
-//        javaCameraView.enableFpsMeter();
+        javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
 
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
         uiRunnable.setSignImageView(signImageView);
+        sharedpreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
+        uiRunnable.setSignVal(sharedpreferences.getInt("last_speed", 0));
+        Log.i(TAG, "onCreate: ---------------------------------------------" + sharedpreferences.getInt("last_speed", 0));
+        uiRunnable.run();
     }
 
     @Override
@@ -159,7 +146,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         width = cols - left;
         top = rows / 2.5;
         middleX = w /2;
-        bottomY = h;
+        bottomY = h * .95;
 
         vehicleCenterX1 = middleX;
         vehicleCenterX2 = middleX;
@@ -269,8 +256,46 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
 
         rgbaInnerWindow.release();
-        Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, rows), new Scalar(0, 255, 0), 2);
+        Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, bottomY), new Scalar(0, 255, 0), 2);
+
+        getVehicleSpeed();
+
         return mRgba;
+    }
+
+    private void getVehicleSpeed() {
+        List<String> providers = locationManager.getAllProviders();
+        int i = 0;
+        long curTime = System.currentTimeMillis();
+        double speed = 0, distance = 0;
+        final long timeDiff = (curTime - prevTime) / 1000;
+
+        if (!providers.isEmpty()) {
+            @SuppressLint("MissingPermission") Location location = locationManager.getLastKnownLocation(providers.get(i));
+            try {
+                distance = location.distanceTo(prevLoc) / 1000;
+                speed = (distance / timeDiff) * 3600;
+
+                Log.i(TAG, "getVehicleSpeed: SPEED  - " + speed);
+//                runOnUiThread(new Runnable() {
+//                    public void run() {
+//                        Toast.makeText(getApplicationContext(), "SPEED : " + speed + "\nTIME : " + timeDiff + "\nDIST : " + distance, Toast.LENGTH_LONG).show();
+//                    }
+//                });
+                Imgproc.putText(mRgba, "SPEED : " + speed + " TIME : " + timeDiff + " DIST : " + distance, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
+                Log.i(TAG, "getVehicleSpeed: TIME SECS- " + timeDiff);
+                Log.i(TAG, "getVehicleSpeed: DIST KM  - " + distance);
+
+                prevLoc = location;
+            } catch (Exception e) {
+                Log.e(TAG, "getVehicleSpeed: ", e);
+            }
+        }
+        else {
+            Toast.makeText(getApplicationContext(), "ERROR: No providers available.", Toast.LENGTH_SHORT).show();
+        }
+        Imgproc.putText(mRgba, "SPEED : " + speed + " TIME : " + System.currentTimeMillis() + " DIST : " + distance, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
+        prevTime = System.currentTimeMillis();
     }
 
     @Override
@@ -278,6 +303,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onPause();
         if (javaCameraView != null)
             javaCameraView.disableView();
+
+        SharedPreferences.Editor editor = getSharedPreferences("Prefs", MODE_PRIVATE).edit();
+        Log.i(TAG, "onPause: -----------------------------------------------------" + uiRunnable.getSignVal());
+        editor.putInt("last_speed", uiRunnable.getSignVal());
+        editor.apply();
+
+        //stop updates to save battery
+        locationManager.removeUpdates(this);
     }
 
     @Override
@@ -299,6 +332,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
         }
         setFullscreen();
+        //restart updates when back in focus
+        setUpLocationServices();
     }
 
     public void splitRGBChannels(Mat rgb_split, Mat hsv_split, Mat hls_split) {
@@ -352,7 +387,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Core.bitwise_and(mRed, mVal_hsv, mask);
     }
 
-    int curSpeedVal = 0;
+    int curSpeedVal = 50;
     String signValue = "";
     Boolean isRunning = false;
 
@@ -396,29 +431,23 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     public void setUISign(String val) {
-        curSpeedVal = uiRunnable.getCurVal();
+        curSpeedVal = uiRunnable.getSignVal();
         if (val.contains("60")) {
             uiRunnable.setSignVal(60);
-            uiRunnable.setCurVal(60);
         } else if (val.contains("80")) {
             uiRunnable.setSignVal(80);
-            uiRunnable.setCurVal(80);
         } else if (val.contains("100")) {
             uiRunnable.setSignVal(100);
-            uiRunnable.setCurVal(100);
         } else if (val.contains("50")) {
             uiRunnable.setSignVal(50);
-            uiRunnable.setCurVal(50);
         } else if (val.contains("120")) {
             uiRunnable.setSignVal(120);
-            uiRunnable.setCurVal(120);
         } else if (val.contains("30")) {
             uiRunnable.setSignVal(30);
-            uiRunnable.setCurVal(30);
         }
-        Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + uiRunnable.getCurVal());
-        if (curSpeedVal != uiRunnable.getCurVal()) {
-            tts.speak(uiRunnable.getCurVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
+        Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + uiRunnable.getSignVal());
+        if (curSpeedVal != uiRunnable.getSignVal()) {
+            tts.speak(uiRunnable.getSignVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
         }
         runOnUiThread(uiRunnable);
     }
@@ -507,6 +536,78 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     @Override
+    public void onInit(int status) {
+        tts.setLanguage(Locale.ENGLISH);
+    }
+
+    private void setUpCameraServices() {
+        //Check if permission is already granted
+        if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {}
+            else {
+                // No explanation needed, we can request the permission.
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
+            }
+        }
+
+        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            assert manager != null;
+            String cameraId = manager.getCameraIdList()[0];
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            assert map != null;
+
+            for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
+                float ratio = (float)size.getWidth() / (float)size.getHeight();
+                if (ratio >= 1.3 && size.getWidth() < 900) {
+                    imgHeight = size.getHeight();
+                    imgWidth = size.getWidth();
+                    break;
+                }
+            }
+        }catch (Error error) {
+            Log.e(TAG, "onCreate: ", error);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setUpLocationServices() {
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            }
+            else {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},1);
+            }
+        }
+        else {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1500, 1, this);
+        }
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+    @Override
     public void setFullscreen() {
         this.getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -515,10 +616,5 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-    }
-
-    @Override
-    public void onInit(int status) {
-        tts.setLanguage(Locale.ENGLISH);
     }
 }

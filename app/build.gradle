@@ -29,4 +29,5 @@ dependencies {
     implementation 'com.android.support:design:27.1.1'
 
     implementation 'com.google.android.gms:play-services-vision:17.0.2'
+    implementation 'com.google.android.gms:play-services-location:16.0.0'
 }
