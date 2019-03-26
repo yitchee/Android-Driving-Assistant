@@ -15,8 +15,19 @@
         android:id="@+id/sign_image_view"
         android:layout_width="100dp"
         android:layout_height="100dp"
-        app:layout_constraintBottom_toBottomOf="parent"
         android:layout_alignParentStart="true"
-        android:layout_margin="5dp" />
+        android:layout_margin="5dp"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <TextView
+        android:id="@+id/speed_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/colorWhite"
+        android:text="SPEED"
+        android:textSize="32sp"
+        android:layout_alignParentStart="true"
+        android:layout_margin="5dp"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </android.support.constraint.ConstraintLayout>

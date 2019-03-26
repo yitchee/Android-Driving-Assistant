@@ -1,7 +1,7 @@
 package ycc.androiddrivingassistant;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -13,9 +13,8 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.speech.tts.TextToSpeech;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -27,6 +26,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.vision.Frame;
@@ -50,15 +50,17 @@ import org.opencv.imgproc.Imgproc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener, LocationListener {
+public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener {
 
     private static final String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     TextRecognizer textRecognizer;
     ImageView signImageView;
+    TextView speedTextView;
 
     Mat mRgba, mGray, circles;
     Mat mRed, mGreen, mBlue, mHue_hsv, mSat_hsv, mVal_hsv, mHue_hls, mSat_hls, mLight_hls;
@@ -77,10 +79,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     TextToSpeech tts;
     SharedPreferences sharedpreferences;
-
-    LocationManager locationManager;
-    Location prevLoc;
-    long prevTime;
 
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -104,8 +102,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        IntentFilter filter = new IntentFilter("ycc.androiddrivingassistant.UPDATE_SPEED");
+        this.registerReceiver(new LocationBroadcastReceiver(), filter);
         setUpCameraServices();
-        setUpLocationServices();
 
         textRecognizer = new TextRecognizer.Builder(this).build();
         if (!textRecognizer.isOperational()) {
@@ -127,8 +126,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView = (JavaCameraView)findViewById(R.id.java_camera_view);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCvCameraViewListener(this);
-        javaCameraView.enableFpsMeter();
+//        javaCameraView.enableFpsMeter();
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
+
+        speedTextView = (TextView) findViewById(R.id.speed_text_view);
 
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
         uiRunnable.setSignImageView(signImageView);
@@ -200,6 +201,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
      ******************************************************************************************/
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+//        Log.i(TAG, "onCameraFrame: THREAD: " + Thread.currentThread().toString());
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
@@ -258,44 +260,25 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         rgbaInnerWindow.release();
         Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, bottomY), new Scalar(0, 255, 0), 2);
 
-        getVehicleSpeed();
-
         return mRgba;
     }
 
-    private void getVehicleSpeed() {
-        List<String> providers = locationManager.getAllProviders();
-        int i = 0;
-        long curTime = System.currentTimeMillis();
-        double speed = 0, distance = 0;
-        final long timeDiff = (curTime - prevTime) / 1000;
+    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+    public class LocationBroadcastReceiver extends BroadcastReceiver {
+        private static final String TAG = "BroadcastReceiver";
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            double vehicleSpeed = Objects.requireNonNull(intent.getExtras()).getDouble("speed");
+            Log.e(TAG, "onReceive: " + vehicleSpeed);
 
-        if (!providers.isEmpty()) {
-            @SuppressLint("MissingPermission") Location location = locationManager.getLastKnownLocation(providers.get(i));
-            try {
-                distance = location.distanceTo(prevLoc) / 1000;
-                speed = (distance / timeDiff) * 3600;
-
-                Log.i(TAG, "getVehicleSpeed: SPEED  - " + speed);
-//                runOnUiThread(new Runnable() {
-//                    public void run() {
-//                        Toast.makeText(getApplicationContext(), "SPEED : " + speed + "\nTIME : " + timeDiff + "\nDIST : " + distance, Toast.LENGTH_LONG).show();
-//                    }
-//                });
-                Imgproc.putText(mRgba, "SPEED : " + speed + " TIME : " + timeDiff + " DIST : " + distance, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
-                Log.i(TAG, "getVehicleSpeed: TIME SECS- " + timeDiff);
-                Log.i(TAG, "getVehicleSpeed: DIST KM  - " + distance);
-
-                prevLoc = location;
-            } catch (Exception e) {
-                Log.e(TAG, "getVehicleSpeed: ", e);
+            if (vehicleSpeed > uiRunnable.getSignVal()) {
+                try {
+                    toneGen1.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 150);
+                } catch (Exception e) {
+                    Log.e(TAG, "onReceive: ", e);
+                }
             }
         }
-        else {
-            Toast.makeText(getApplicationContext(), "ERROR: No providers available.", Toast.LENGTH_SHORT).show();
-        }
-        Imgproc.putText(mRgba, "SPEED : " + speed + " TIME : " + System.currentTimeMillis() + " DIST : " + distance, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
-        prevTime = System.currentTimeMillis();
     }
 
     @Override
@@ -310,7 +293,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         editor.apply();
 
         //stop updates to save battery
-        locationManager.removeUpdates(this);
+        stopService(new Intent(this, LocationService.class));
     }
 
     @Override
@@ -318,6 +301,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onDestroy();
         if (javaCameraView != null)
             javaCameraView.disableView();
+        stopService(new Intent(this, LocationService.class));
     }
 
     @Override
@@ -332,8 +316,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
         }
         setFullscreen();
-        //restart updates when back in focus
-        setUpLocationServices();
+        // restart location updates when back in focus
+        Intent locationServiceIntent = new Intent(this, LocationService.class);
+        startService(locationServiceIntent);
     }
 
     public void splitRGBChannels(Mat rgb_split, Mat hsv_split, Mat hls_split) {
@@ -404,7 +389,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     Utils.matToBitmap(copy, bm);
                 } catch (Exception e) {
                     bm = null;
-                    Log.e(TAG, "run: ", e);
                 }
 
                 if (bm != null) {
@@ -571,40 +555,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
-    }
-
-    private void setUpLocationServices() {
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if (ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
-            }
-            else {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},1);
-            }
-        }
-        else {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1500, 1, this);
-        }
-    }
-
-    @Override
-    public void onLocationChanged(Location location) {
-
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-
-    }
-
-    @Override
-    public void onProviderEnabled(String provider) {
-
-    }
-
-    @Override
-    public void onProviderDisabled(String provider) {
-
     }
 
     @Override
