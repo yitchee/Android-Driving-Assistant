@@ -1,4 +1,4 @@
-package com.androiddrivingassistant;
+package ycc.androiddrivingassistant;
 
 import android.Manifest;
 import android.content.Context;

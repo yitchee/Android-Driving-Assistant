@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Android Driving Assistant</string>
+    <string name="settings">Settings</string>
+    <string name="speedometerValue">SPEED</string>
 </resources>

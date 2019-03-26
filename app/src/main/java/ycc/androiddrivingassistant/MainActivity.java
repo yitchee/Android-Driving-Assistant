@@ -102,9 +102,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        getPermissions();
+        setUpCameraServices();
+
         IntentFilter filter = new IntentFilter("ycc.androiddrivingassistant.UPDATE_SPEED");
         this.registerReceiver(new LocationBroadcastReceiver(), filter);
-        setUpCameraServices();
 
         textRecognizer = new TextRecognizer.Builder(this).build();
         if (!textRecognizer.isOperational()) {
@@ -263,7 +265,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return mRgba;
     }
 
-    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
     public class LocationBroadcastReceiver extends BroadcastReceiver {
         private static final String TAG = "BroadcastReceiver";
         @Override
@@ -271,8 +272,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             double vehicleSpeed = Objects.requireNonNull(intent.getExtras()).getDouble("speed");
             Log.e(TAG, "onReceive: " + vehicleSpeed);
 
-            if (vehicleSpeed > uiRunnable.getSignVal()) {
+            if (vehicleSpeed > uiRunnable.getSignVal() && uiRunnable.getSignVal() > 0) {
                 try {
+                    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
                     toneGen1.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 150);
                 } catch (Exception e) {
                     Log.e(TAG, "onReceive: ", e);
@@ -525,15 +527,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     private void setUpCameraServices() {
-        //Check if permission is already granted
-        if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {}
-            else {
-                // No explanation needed, we can request the permission.
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
-            }
-        }
-
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
             assert manager != null;
@@ -555,6 +548,30 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+    }
+
+    private void getPermissions() {
+        if(!hasPermissions(this, PERMISSIONS)){
+            ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
+        }
+    }
+
+    int PERMISSION_ALL = 1;
+    String[] PERMISSIONS = {
+            android.Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+    };
+
+    public static boolean hasPermissions(Context context, String... permissions) {
+        if (context != null && permissions != null) {
+            for (String permission : permissions) {
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override
