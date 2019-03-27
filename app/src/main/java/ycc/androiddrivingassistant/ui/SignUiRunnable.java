@@ -1,19 +1,21 @@
-package ycc.androiddrivingassistant;
+package ycc.androiddrivingassistant.ui;
 
 import android.util.Log;
 import android.widget.ImageView;
 
+import ycc.androiddrivingassistant.R;
+
 /* Class to update the UI with speed sign images */
-public class UiRunnable implements Runnable {
+public class SignUiRunnable implements Runnable {
+    private static final String TAG = "UiRunnableClass";
     private int signVal;
     private ImageView signImageView;
-    private String TAG = "UiRunnableClass";
 
-    UiRunnable() {
+    public SignUiRunnable() {
         signVal = 0;
     }
 
-    UiRunnable(int val, ImageView imageView) {
+    public SignUiRunnable(int val, ImageView imageView) {
         setSignVal(val);
         setSignImageView(imageView);
     }

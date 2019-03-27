@@ -13,6 +13,7 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 
+/* A service that runs in the background to get location updates and send it to the main activity */
 public class LocationService extends Service {
     private static final String TAG = "LocationService";
     private LocationManager locationManager;

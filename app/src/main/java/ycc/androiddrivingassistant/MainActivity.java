@@ -17,7 +17,6 @@ import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.speech.tts.TextToSpeech;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -53,6 +52,8 @@ import java.util.Locale;
 import java.util.Objects;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
+import ycc.androiddrivingassistant.ui.SignUiRunnable;
+import ycc.androiddrivingassistant.ui.SpeedUiRunnable;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener {
 
@@ -79,6 +80,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     TextToSpeech tts;
     SharedPreferences sharedpreferences;
+
+    SignUiRunnable signUiRunnable = new SignUiRunnable();
+    SpeedUiRunnable speedUiRunnable = new SpeedUiRunnable();
 
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -132,13 +136,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
 
         speedTextView = (TextView) findViewById(R.id.speed_text_view);
-
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
-        uiRunnable.setSignImageView(signImageView);
+
+        signUiRunnable.setSignImageView(signImageView);
+        speedUiRunnable.setSpeedTextView(speedTextView);
         sharedpreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
-        uiRunnable.setSignVal(sharedpreferences.getInt("last_speed", 0));
+        signUiRunnable.setSignVal(sharedpreferences.getInt("last_speed", 0));
         Log.i(TAG, "onCreate: ---------------------------------------------" + sharedpreferences.getInt("last_speed", 0));
-        uiRunnable.run();
+        signUiRunnable.run();
     }
 
     @Override
@@ -272,7 +277,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             double vehicleSpeed = Objects.requireNonNull(intent.getExtras()).getDouble("speed");
             Log.e(TAG, "onReceive: " + vehicleSpeed);
 
-            if (vehicleSpeed > uiRunnable.getSignVal() && uiRunnable.getSignVal() > 0) {
+            speedUiRunnable.setSpeedVal(vehicleSpeed);
+            runOnUiThread(speedUiRunnable);
+            if (vehicleSpeed > signUiRunnable.getSignVal() && signUiRunnable.getSignVal() > 0) {
                 try {
                     ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
                     toneGen1.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 150);
@@ -290,11 +297,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             javaCameraView.disableView();
 
         SharedPreferences.Editor editor = getSharedPreferences("Prefs", MODE_PRIVATE).edit();
-        Log.i(TAG, "onPause: -----------------------------------------------------" + uiRunnable.getSignVal());
-        editor.putInt("last_speed", uiRunnable.getSignVal());
+        Log.i(TAG, "onPause: Latest detected speed limit: " + signUiRunnable.getSignVal());
+        editor.putInt("last_speed", signUiRunnable.getSignVal());
         editor.apply();
 
-        //stop updates to save battery
+        // stop updates to save battery
         stopService(new Intent(this, LocationService.class));
     }
 
@@ -417,28 +424,26 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     public void setUISign(String val) {
-        curSpeedVal = uiRunnable.getSignVal();
+        curSpeedVal = signUiRunnable.getSignVal();
         if (val.contains("60")) {
-            uiRunnable.setSignVal(60);
+            signUiRunnable.setSignVal(60);
         } else if (val.contains("80")) {
-            uiRunnable.setSignVal(80);
+            signUiRunnable.setSignVal(80);
         } else if (val.contains("100")) {
-            uiRunnable.setSignVal(100);
+            signUiRunnable.setSignVal(100);
         } else if (val.contains("50")) {
-            uiRunnable.setSignVal(50);
+            signUiRunnable.setSignVal(50);
         } else if (val.contains("120")) {
-            uiRunnable.setSignVal(120);
+            signUiRunnable.setSignVal(120);
         } else if (val.contains("30")) {
-            uiRunnable.setSignVal(30);
+            signUiRunnable.setSignVal(30);
         }
-        Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + uiRunnable.getSignVal());
-        if (curSpeedVal != uiRunnable.getSignVal()) {
-            tts.speak(uiRunnable.getSignVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
+        Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + signUiRunnable.getSignVal());
+        if (curSpeedVal != signUiRunnable.getSignVal()) {
+            tts.speak(signUiRunnable.getSignVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
         }
-        runOnUiThread(uiRunnable);
+        runOnUiThread(signUiRunnable);
     }
-
-    UiRunnable uiRunnable = new UiRunnable();
 
     public void getAverageSlopes(Mat lines) {
         List<Double> left_slopes = new ArrayList<>();
@@ -556,6 +561,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
     }
 
+    /* Checks if all the needed permissions are enabled and asks user if not */
     int PERMISSION_ALL = 1;
     String[] PERMISSIONS = {
             android.Manifest.permission.CAMERA,
@@ -567,6 +573,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (context != null && permissions != null) {
             for (String permission : permissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(context,"Camera permission is needed or \nthis application will not work.", Toast.LENGTH_LONG).show();
                     return false;
                 }
             }

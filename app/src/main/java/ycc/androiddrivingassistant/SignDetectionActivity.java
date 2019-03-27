@@ -44,6 +44,7 @@ import com.google.android.gms.vision.Frame;
 import com.google.android.gms.vision.text.*;
 
 import ycc.androiddrivingassistant.ui.ScreenInterface;
+import ycc.androiddrivingassistant.ui.SignUiRunnable;
 
 
 public class SignDetectionActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface {
@@ -288,25 +289,25 @@ public class SignDetectionActivity extends AppCompatActivity implements CameraBr
     }
 
     public void setUISign(String val) {
-        uiRunnable.setSignImageView(signImageView);
+        signUiRunnable.setSignImageView(signImageView);
 
         if (val.contains("60")) {
-            uiRunnable.setSignVal(60);
+            signUiRunnable.setSignVal(60);
         } else if (val.contains("80")) {
-            uiRunnable.setSignVal(80);
+            signUiRunnable.setSignVal(80);
         } else if (val.contains("100")) {
-            uiRunnable.setSignVal(100);
+            signUiRunnable.setSignVal(100);
         } else if (val.contains("50")) {
-            uiRunnable.setSignVal(50);
+            signUiRunnable.setSignVal(50);
         } else if (val.contains("120")) {
-            uiRunnable.setSignVal(120);
+            signUiRunnable.setSignVal(120);
         } else if (val.contains("30")) {
-            uiRunnable.setSignVal(30);
+            signUiRunnable.setSignVal(30);
         }
-        runOnUiThread(uiRunnable);
+        runOnUiThread(signUiRunnable);
     }
 
-    UiRunnable uiRunnable = new UiRunnable();
+    SignUiRunnable signUiRunnable = new SignUiRunnable();
 
     public void changeActivity(View v) {
         Intent intent = new Intent(getApplicationContext(), LaneDetectionActivity.class);
