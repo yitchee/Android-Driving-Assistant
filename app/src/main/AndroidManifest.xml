@@ -19,12 +19,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
         <activity
             android:name=".SignDetectionActivity"
-            android:screenOrientation="landscape"></activity>
+            android:screenOrientation="landscape" />
         <activity
             android:name=".LaneDetectionActivity"
-            android:screenOrientation="landscape"></activity>
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".SpeedTestActivity"
+            android:screenOrientation="portrait" />
+
         <activity
             android:name=".MainActivity"
             android:screenOrientation="landscape">
@@ -34,13 +39,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".SpeedTestActivity">
-
-            <!-- <intent-filter> -->
-            <!-- <action android:name="android.intent.action.MAIN" /> -->
-            <!-- <category android:name="android.intent.category.LAUNCHER" /> -->
-            <!-- </intent-filter> -->
-        </activity>
 
         <service android:name=".LocationService" />
 
@@ -49,8 +47,15 @@
             android:value="ocr" />
 
         <activity
-            android:name=".SettingsActivity"
-            android:label="@string/title_activity_settings"></activity>
+            android:name=".ResolutionSettingsActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/AppTheme.CustomPopUp">
+        </activity>
+
+        <activity android:name=".GpsSettingsActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/AppTheme.CustomPopUp">
+        </activity>
     </application>
 
 </manifest>

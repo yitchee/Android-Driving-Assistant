@@ -16,6 +16,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.speech.tts.TextToSpeech;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -24,6 +25,8 @@ import android.util.SparseArray;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -56,12 +59,15 @@ import ycc.androiddrivingassistant.ui.SignUiRunnable;
 import ycc.androiddrivingassistant.ui.SpeedUiRunnable;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, ScreenInterface, TextToSpeech.OnInitListener {
-
     private static final String TAG = "MainActivity";
     JavaCameraView javaCameraView;
     TextRecognizer textRecognizer;
     ImageView signImageView;
     TextView speedTextView;
+    FloatingActionButton fabSettings, fabResolutions, fabGps;
+    Animation FabOpen, FabClose, FabRotateCw, FabRotateAntiCw;
+    Boolean isOpen = false;
+
 
     Mat mRgba, mGray, circles;
     Mat mRed, mGreen, mBlue, mHue_hsv, mSat_hsv, mVal_hsv, mHue_hls, mSat_hls, mLight_hls;
@@ -72,14 +78,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     Bitmap bm;
     Boolean newSignFlag = false;
 
-    int imgWidth=1920, imgHeight=1080;
+    int imgWidth, imgHeight;
     int rows, cols, left, width;
     double top, middleX, bottomY;
 
     double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
     TextToSpeech tts;
-    SharedPreferences sharedpreferences;
 
     SignUiRunnable signUiRunnable = new SignUiRunnable();
     SpeedUiRunnable speedUiRunnable = new SpeedUiRunnable();
@@ -138,11 +143,22 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         speedTextView = (TextView) findViewById(R.id.speed_text_view);
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
 
+        fabSettings = (FloatingActionButton) findViewById(R.id.fab_settings);
+        fabResolutions = (FloatingActionButton) findViewById(R.id.fab_resolution);
+        fabGps = (FloatingActionButton) findViewById(R.id.fab_gps);
+
+        setViewClickListeners();
+        FabOpen = AnimationUtils.loadAnimation(this, R.anim.fab_open);
+        FabClose = AnimationUtils.loadAnimation(this, R.anim.fab_close);
+        FabRotateCw = AnimationUtils.loadAnimation(this, R.anim.rotate_clockwise);
+        FabRotateAntiCw = AnimationUtils.loadAnimation(this, R.anim.rotate_anticlockwise);
+
         signUiRunnable.setSignImageView(signImageView);
         speedUiRunnable.setSpeedTextView(speedTextView);
-        sharedpreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
-        signUiRunnable.setSignVal(sharedpreferences.getInt("last_speed", 0));
-        Log.i(TAG, "onCreate: ---------------------------------------------" + sharedpreferences.getInt("last_speed", 0));
+        SharedPreferences sharedPreferences;
+        sharedPreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
+        signUiRunnable.setSignVal(sharedPreferences.getInt("last_speed", 0));
+        Log.i(TAG, "onCreate: ---------------------------------------------" + sharedPreferences.getInt("last_speed", 0));
         signUiRunnable.run();
     }
 
@@ -208,7 +224,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
      ******************************************************************************************/
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-//        Log.i(TAG, "onCameraFrame: THREAD: " + Thread.currentThread().toString());
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
@@ -265,7 +280,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
 
         rgbaInnerWindow.release();
-        Imgproc.rectangle(mRgba, new Point(left, top), new Point(imgWidth-left, bottomY), new Scalar(0, 255, 0), 2);
+        Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 255, 0), 2);
 
         return mRgba;
     }
@@ -315,6 +330,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     protected void onResume() {
+        SharedPreferences sharedPreferences = getSharedPreferences("Prefs", MODE_PRIVATE);
         super.onResume();
         if (OpenCVLoader.initDebug()) {
             Log.d(TAG, "OpenCV initialize success");
@@ -324,6 +340,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Log.d(TAG, "OpenCV initialize failed");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
         }
+        int width = sharedPreferences.getInt("res_width", 1920);
+        int height = sharedPreferences.getInt("res_height", 1080);
+        javaCameraView.setMaxFrameSize(width, height);
+        javaCameraView.disableView();
+        javaCameraView.enableView();
+        onCameraViewStarted(width, height);
         setFullscreen();
         // restart location updates when back in focus
         Intent locationServiceIntent = new Intent(this, LocationService.class);
@@ -532,27 +554,97 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     private void setUpCameraServices() {
-        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        SharedPreferences sharedPreferences = getSharedPreferences("Prefs", MODE_PRIVATE);
+        boolean firstLaunch = true;
+        Log.i(TAG, "setUpCameraServices: " + firstLaunch);
+        SharedPreferences.Editor editor = getSharedPreferences("Prefs", MODE_PRIVATE).edit();
         try {
-            assert manager != null;
-            String cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            assert map != null;
-
-            for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
-                float ratio = (float)size.getWidth() / (float)size.getHeight();
-                if (ratio >= 1.3 && size.getWidth() < 900) {
-                    imgHeight = size.getHeight();
-                    imgWidth = size.getWidth();
-                    break;
-                }
-            }
-        }catch (Error error) {
-            Log.e(TAG, "onCreate: ", error);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
+            firstLaunch = sharedPreferences.getBoolean("first_launch", true);
+            Log.i(TAG, "setUpCameraServices: " + firstLaunch);
+        } catch (Exception e) {
+            editor.putBoolean("first_launch", false);
+            editor.apply();
+            Log.e(TAG, "setUpCameraServices: ", e);
         }
+
+        if (firstLaunch) {
+            CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            try {
+                assert manager != null;
+                String cameraId = manager.getCameraIdList()[0];
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+                StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                assert map != null;
+
+                for (android.util.Size size : map.getOutputSizes(SurfaceTexture.class)) {
+                    float ratio = (float) size.getWidth() / (float) size.getHeight();
+                    if (ratio >= 1.3 && size.getWidth() < 900) {
+                        imgHeight = size.getHeight();
+                        imgWidth = size.getWidth();
+                        break;
+                    }
+                }
+                editor.putInt("res_height", imgHeight);
+                editor.putInt("res_width", imgWidth);
+                editor.apply();
+                Log.i(TAG, "setUpCameraServices: " + sharedPreferences);
+            } catch (Error error) {
+                Log.e(TAG, "onCreate: ", error);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        else {
+            imgHeight = sharedPreferences.getInt("res_height", 1080);
+            imgWidth = sharedPreferences.getInt("res_width", 1920);
+        }
+    }
+
+    private void setViewClickListeners() {
+        fabSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isOpen) {
+                            fabResolutions.startAnimation(FabClose);
+                            fabGps.startAnimation(FabClose);
+                            fabSettings.startAnimation(FabRotateAntiCw);
+                            fabResolutions.setClickable(false);
+                            fabGps.setClickable(false);
+                            isOpen = false;
+                        } else {
+                            fabResolutions.startAnimation(FabOpen);
+                            fabGps.startAnimation(FabOpen);
+                            fabSettings.startAnimation(FabRotateCw);
+                            fabResolutions.setClickable(true);
+                            fabGps.setClickable(true);
+                            isOpen = true;
+                        }
+                    }
+                });
+            }
+        });
+
+        fabResolutions.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(getApplicationContext(), ResolutionSettingsActivity.class);
+                startActivity(intent);
+                Toast.makeText(getApplicationContext(), "Resolution Settings", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        fabGps.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(getApplicationContext(), GpsSettingsActivity.class);
+                startActivity(intent);
+                Toast.makeText(getApplicationContext(), "GPS Settings", Toast.LENGTH_SHORT).show();
+            }
+        });
+
     }
 
     private void getPermissions() {

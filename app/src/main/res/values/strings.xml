@@ -2,4 +2,7 @@
     <string name="app_name">Android Driving Assistant</string>
     <string name="settings">Settings</string>
     <string name="speedometerValue">SPEED</string>
+    <string name="allow_gps">Allow GPS</string>
+    <string name="info">Information</string>
+    <string name="gps_info">Enabling this feature allows this app to use the GPS of the phone to get the vehicle\'s speed.</string>
 </resources>

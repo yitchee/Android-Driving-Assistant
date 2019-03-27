@@ -7,8 +7,8 @@ import ycc.androiddrivingassistant.R;
 
 /* Class to update the UI with speed sign images */
 public class SignUiRunnable implements Runnable {
-    private static final String TAG = "UiRunnableClass";
     private int signVal;
+    private static final String TAG = "UiRunnableClass";
     private ImageView signImageView;
 
     public SignUiRunnable() {
