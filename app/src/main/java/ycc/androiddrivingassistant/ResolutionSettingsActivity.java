@@ -29,7 +29,7 @@ public class ResolutionSettingsActivity extends Activity implements ScreenInterf
         setContentView(R.layout.activity_resolution_settings);
 
         sharedPreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
-        editor = getSharedPreferences("Prefs", MODE_PRIVATE).edit();
+        editor = sharedPreferences.edit();
         editor.apply();
 
         radioGroup = (RadioGroup) findViewById(R.id.radio_group);
@@ -63,6 +63,7 @@ public class ResolutionSettingsActivity extends Activity implements ScreenInterf
 
     private void getSupportedResolutions() {
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        SharedPreferences sharedPreferences = getSharedPreferences("Prefs", Context.MODE_PRIVATE);
         int imgHeight, imgWidth;
         try {
             assert manager != null;

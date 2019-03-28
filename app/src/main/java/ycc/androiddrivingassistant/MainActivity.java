@@ -285,6 +285,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         return mRgba;
     }
 
+    int speedingCount = 0;
+    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+
     public class LocationBroadcastReceiver extends BroadcastReceiver {
         private static final String TAG = "BroadcastReceiver";
         @Override
@@ -295,12 +298,18 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             speedUiRunnable.setSpeedVal(vehicleSpeed);
             runOnUiThread(speedUiRunnable);
             if (vehicleSpeed > signUiRunnable.getSignVal() && signUiRunnable.getSignVal() > 0) {
-                try {
-                    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
-                    toneGen1.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 150);
-                } catch (Exception e) {
-                    Log.e(TAG, "onReceive: ", e);
+                speedingCount += 1;
+                if (speedingCount >= 5) {
+                    try {
+                        toneGen1.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 200);
+                    } catch (Exception e) {
+                        toneGen1.release();
+                        toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+                        Log.e(TAG, "onReceive: ", e);
+                    }
                 }
+            } else {
+                speedingCount = 0;
             }
         }
     }
@@ -345,11 +354,20 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView.setMaxFrameSize(width, height);
         javaCameraView.disableView();
         javaCameraView.enableView();
-        onCameraViewStarted(width, height);
+
         setFullscreen();
         // restart location updates when back in focus
         Intent locationServiceIntent = new Intent(this, LocationService.class);
-        startService(locationServiceIntent);
+        if (sharedPreferences.getBoolean("gps_enabled", true)) {
+            startService(locationServiceIntent);
+            speedTextView.setText("0.0km/hr");
+        }
+        else {
+            stopService(locationServiceIntent);
+            speedTextView.setText("GPS Disabled");
+        }
+
+
     }
 
     public void splitRGBChannels(Mat rgb_split, Mat hsv_split, Mat hls_split) {
@@ -555,19 +573,17 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     private void setUpCameraServices() {
         SharedPreferences sharedPreferences = getSharedPreferences("Prefs", MODE_PRIVATE);
-        boolean firstLaunch = true;
-        Log.i(TAG, "setUpCameraServices: " + firstLaunch);
-        SharedPreferences.Editor editor = getSharedPreferences("Prefs", MODE_PRIVATE).edit();
+        boolean firstLaunch = false;
+        SharedPreferences.Editor editor = sharedPreferences.edit();
         try {
             firstLaunch = sharedPreferences.getBoolean("first_launch", true);
             Log.i(TAG, "setUpCameraServices: " + firstLaunch);
         } catch (Exception e) {
-            editor.putBoolean("first_launch", false);
-            editor.apply();
             Log.e(TAG, "setUpCameraServices: ", e);
         }
 
         if (firstLaunch) {
+            editor.putBoolean("gps_enabled", true);
             CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             try {
                 assert manager != null;
@@ -586,13 +602,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 }
                 editor.putInt("res_height", imgHeight);
                 editor.putInt("res_width", imgWidth);
-                editor.apply();
                 Log.i(TAG, "setUpCameraServices: " + sharedPreferences);
             } catch (Error error) {
                 Log.e(TAG, "onCreate: ", error);
             } catch (CameraAccessException e) {
                 e.printStackTrace();
             }
+            editor.putBoolean("first_launch", false);
+            editor.apply();
         }
         else {
             imgHeight = sharedPreferences.getInt("res_height", 1080);

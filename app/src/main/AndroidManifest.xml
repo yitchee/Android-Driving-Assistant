@@ -26,9 +26,6 @@
         <activity
             android:name=".LaneDetectionActivity"
             android:screenOrientation="landscape" />
-        <activity
-            android:name=".SpeedTestActivity"
-            android:screenOrientation="portrait" />
 
         <activity
             android:name=".MainActivity"

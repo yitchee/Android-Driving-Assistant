@@ -7,7 +7,7 @@
     android:background="@color/colorBlack"
     tools:context=".GpsSettingsActivity">
     <Switch
-        android:id="@+id/switch1"
+        android:id="@+id/gps_switch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="28sp"
