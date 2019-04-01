@@ -6,6 +6,7 @@
     android:layout_height="match_parent"
     android:background="@color/colorBlack"
     tools:context=".GpsSettingsActivity">
+
     <Switch
         android:id="@+id/gps_switch"
         android:layout_width="match_parent"
@@ -55,4 +56,5 @@
         app:fabSize="mini"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
 </android.support.constraint.ConstraintLayout>

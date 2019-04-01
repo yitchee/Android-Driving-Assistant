@@ -21,13 +21,6 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:name=".SignDetectionActivity"
-            android:screenOrientation="landscape" />
-        <activity
-            android:name=".LaneDetectionActivity"
-            android:screenOrientation="landscape" />
-
-        <activity
             android:name=".MainActivity"
             android:screenOrientation="landscape">
             <intent-filter>
@@ -37,22 +30,20 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ResolutionSettingsActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/AppTheme.CustomPopUp" />
+        <activity
+            android:name=".GpsSettingsActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/AppTheme.CustomPopUp"/>
+
         <service android:name=".LocationService" />
 
         <meta-data
             android:name="com.google.android.gms.vision.DEPENDENCIES"
             android:value="ocr" />
-
-        <activity
-            android:name=".ResolutionSettingsActivity"
-            android:screenOrientation="landscape"
-            android:theme="@style/AppTheme.CustomPopUp">
-        </activity>
-
-        <activity android:name=".GpsSettingsActivity"
-            android:screenOrientation="landscape"
-            android:theme="@style/AppTheme.CustomPopUp">
-        </activity>
     </application>
 
 </manifest>

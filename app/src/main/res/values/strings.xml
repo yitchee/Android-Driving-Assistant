@@ -5,4 +5,6 @@
     <string name="allow_gps">Allow GPS</string>
     <string name="info">Information</string>
     <string name="gps_info">Enabling this feature allows this app to use the GPS of the phone to get the vehicle\'s speed.</string>
+    <string name="sound_string">Warnings and Alerts</string>
+    <string name="info_sound">This enables/disables audio alerts and warnings about speed limits and lane departures.</string>
 </resources>

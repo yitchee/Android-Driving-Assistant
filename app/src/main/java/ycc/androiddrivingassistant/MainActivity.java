@@ -14,6 +14,7 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.media.ToneGenerator;
 import android.os.CountDownTimer;
 import android.speech.tts.TextToSpeech;
@@ -66,7 +67,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     TextRecognizer textRecognizer;
     ImageView signImageView;
     TextView speedTextView;
-    FloatingActionButton fabSettings, fabResolutions, fabGps;
+    FloatingActionButton fabSettings, fabResolutions, fabGps, fabSound;
     Animation FabOpen, FabClose, FabRotateCw, FabRotateAntiCw;
     Boolean isOpen = false;
 
@@ -86,14 +87,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
-    TextToSpeech ttsSpeed, ttsLane;
-
     SignUiRunnable signUiRunnable = new SignUiRunnable();
     SpeedUiRunnable speedUiRunnable = new SpeedUiRunnable();
 
+    TextToSpeech ttsSpeed, ttsLane;
     int speedingCount = 0;
     ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
     ToneGenerator toneGen2 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+    AudioManager audioManager;
 
     CountDownTimer timer;
     boolean isTimerRunning = false;
@@ -119,6 +120,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        fabSettings = (FloatingActionButton) findViewById(R.id.fab_settings);
+        fabResolutions = (FloatingActionButton) findViewById(R.id.fab_resolution);
+        fabGps = (FloatingActionButton) findViewById(R.id.fab_gps);
+        fabSound = (FloatingActionButton) findViewById(R.id.fab_sound);
 
         getPermissions();
         setUpCameraServices();
@@ -152,10 +159,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         speedTextView = (TextView) findViewById(R.id.speed_text_view);
         signImageView = (ImageView) findViewById(R.id.sign_image_view);
-
-        fabSettings = (FloatingActionButton) findViewById(R.id.fab_settings);
-        fabResolutions = (FloatingActionButton) findViewById(R.id.fab_resolution);
-        fabGps = (FloatingActionButton) findViewById(R.id.fab_gps);
 
         setViewClickListeners();
         FabOpen = AnimationUtils.loadAnimation(this, R.anim.fab_open);
@@ -650,6 +653,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         if (firstLaunch) {
             editor.putBoolean("gps_enabled", true);
+            editor.putBoolean("sound_enabled", true);
             CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             try {
                 assert manager != null;
@@ -681,6 +685,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             imgHeight = sharedPreferences.getInt("res_height", 1080);
             imgWidth = sharedPreferences.getInt("res_width", 1920);
         }
+
+        if (sharedPreferences.getBoolean("sound_enabled", true)) {
+            fabSound.setImageResource(R.drawable.volume_on_white_24dp);
+        } else {
+            fabSound.setImageResource(R.drawable.volume_off_white_24dp);
+        }
     }
 
     private void setViewClickListeners() {
@@ -693,6 +703,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         if (isOpen) {
                             fabResolutions.startAnimation(FabClose);
                             fabGps.startAnimation(FabClose);
+                            fabSound.startAnimation(FabClose);
                             fabSettings.startAnimation(FabRotateAntiCw);
                             fabResolutions.setClickable(false);
                             fabGps.setClickable(false);
@@ -700,6 +711,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         } else {
                             fabResolutions.startAnimation(FabOpen);
                             fabGps.startAnimation(FabOpen);
+                            fabSound.startAnimation(FabOpen);
                             fabSettings.startAnimation(FabRotateCw);
                             fabResolutions.setClickable(true);
                             fabGps.setClickable(true);
@@ -725,6 +737,34 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 Intent intent = new Intent(getApplicationContext(), GpsSettingsActivity.class);
                 startActivity(intent);
                 Toast.makeText(getApplicationContext(), "GPS Settings", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        fabSound.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SharedPreferences sharedPreferences = getSharedPreferences("Prefs", MODE_PRIVATE);
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                if (sharedPreferences.getBoolean("sound_enabled", true)) {
+                    fabSound.setImageResource(R.drawable.volume_off_white_24dp);
+                    Toast.makeText(getApplicationContext(), "Alerts/warnings disabled", Toast.LENGTH_SHORT).show();
+                    editor.putBoolean("sound_enabled", false);
+                    try {
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
+                    } catch (Exception e) {
+                        Log.e(TAG, "onClick: ", e);
+                    }
+                } else {
+                    fabSound.setImageResource(R.drawable.volume_on_white_24dp);
+                    Toast.makeText(getApplicationContext(), "Alerts/warnings enabled", Toast.LENGTH_SHORT).show();
+                    editor.putBoolean("sound_enabled", true);
+                    try {
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+                    } catch (Exception e) {
+                        Log.e(TAG, "onClick: ", e);
+                    }
+                }
+                editor.apply();
             }
         });
 
