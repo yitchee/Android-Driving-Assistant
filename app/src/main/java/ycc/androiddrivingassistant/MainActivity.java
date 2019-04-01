@@ -302,7 +302,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         circles.release();
 
         Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
-        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 75, 65);
+        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 40, 65);
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
