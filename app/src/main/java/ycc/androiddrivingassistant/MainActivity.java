@@ -14,7 +14,6 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
 import android.media.ToneGenerator;
 import android.os.CountDownTimer;
 import android.speech.tts.TextToSpeech;
@@ -688,8 +687,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         if (sharedPreferences.getBoolean("sound_enabled", true)) {
             fabSound.setImageResource(R.drawable.volume_on_white_24dp);
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
         } else {
             fabSound.setImageResource(R.drawable.volume_off_white_24dp);
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
         }
     }
 
