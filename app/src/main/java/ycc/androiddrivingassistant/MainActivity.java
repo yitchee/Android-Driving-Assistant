@@ -15,6 +15,7 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
+import android.os.CountDownTimer;
 import android.speech.tts.TextToSpeech;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
@@ -42,6 +43,7 @@ import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
 import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
@@ -84,10 +86,17 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     double vehicleCenterX1, vehicleCenterY1, vehicleCenterX2, vehicleCenterY2, laneCenterX, laneCenterY;
 
-    TextToSpeech tts;
+    TextToSpeech ttsSpeed, ttsLane;
 
     SignUiRunnable signUiRunnable = new SignUiRunnable();
     SpeedUiRunnable speedUiRunnable = new SpeedUiRunnable();
+
+    int speedingCount = 0;
+    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+    ToneGenerator toneGen2 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+
+    CountDownTimer timer;
+    boolean isTimerRunning = false;
 
     BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -130,7 +139,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             }
         }
 
-        tts = new TextToSpeech(this, this);
+        ttsSpeed = new TextToSpeech(this, this);
+        ttsLane = new TextToSpeech(this, this);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -160,6 +170,22 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         signUiRunnable.setSignVal(sharedPreferences.getInt("last_speed", 0));
         Log.i(TAG, "onCreate: ---------------------------------------------" + sharedPreferences.getInt("last_speed", 0));
         signUiRunnable.run();
+
+        // Timer to alert user of lane departure
+        timer = new CountDownTimer(30000, 1000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                if (millisUntilFinished < 26000) {
+                    toneGen2.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 250);
+                    ttsLane.speak("Lane departure detected", TextToSpeech.QUEUE_ADD, null, "Lane Departure Detected");
+                }
+            }
+
+            @Override
+            public void onFinish() {
+                Log.i(TAG, "onFinish: ---------- TIMER DONE ----------");
+            }
+        };
     }
 
     @Override
@@ -274,7 +300,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         circles.release();
 
         Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
-        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 110, 50);
+        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 75, 65);
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
@@ -284,9 +310,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         return mRgba;
     }
-
-    int speedingCount = 0;
-    ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
 
     public class LocationBroadcastReceiver extends BroadcastReceiver {
         private static final String TAG = "BroadcastReceiver";
@@ -324,7 +347,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Log.i(TAG, "onPause: Latest detected speed limit: " + signUiRunnable.getSignVal());
         editor.putInt("last_speed", signUiRunnable.getSignVal());
         editor.apply();
-
+        timer.cancel();
         // stop updates to save battery
         stopService(new Intent(this, LocationService.class));
     }
@@ -335,6 +358,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (javaCameraView != null)
             javaCameraView.disableView();
         stopService(new Intent(this, LocationService.class));
+        ttsLane.shutdown();
+        ttsSpeed.shutdown();
     }
 
     @Override
@@ -360,7 +385,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Intent locationServiceIntent = new Intent(this, LocationService.class);
         if (sharedPreferences.getBoolean("gps_enabled", true)) {
             startService(locationServiceIntent);
-            speedTextView.setText("0.0km/hr");
+            speedTextView.setText("0.0 km/hr");
         }
         else {
             stopService(locationServiceIntent);
@@ -480,7 +505,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
         Log.i(TAG, "setUISign:" + curSpeedVal + " -------------------------------" + signUiRunnable.getSignVal());
         if (curSpeedVal != signUiRunnable.getSignVal()) {
-            tts.speak(signUiRunnable.getSignVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
+            ttsSpeed.speak(signUiRunnable.getSignVal() + " kilometers per hour", TextToSpeech.QUEUE_FLUSH, null, "Speed Detected");
         }
         runOnUiThread(signUiRunnable);
     }
@@ -490,6 +515,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         List<Double> right_slopes = new ArrayList<>();
         List<Double> left_y_intercept = new ArrayList<>();
         List<Double> right_y_intercept = new ArrayList<>();
+
+        // Threshold zone for detected lanes, lines must be within this zone
+        double zoneX1 = cols-left*2.75;
+        double zoneX2 = left*2.75;
+//        Imgproc.line(mRgba, new Point(zoneX1, 0), new Point(zoneX1, rows), new Scalar(0, 155, 0), 2, 8);
+//        Imgproc.line(mRgba, new Point(zoneX2, 0), new Point(zoneX2, rows), new Scalar(0, 155, 0), 2, 8);
 
         for (int i=0; i<lines.rows(); i++) {
             double[] points = lines.get(i, 0);
@@ -504,20 +535,26 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 Point p1 = new Point(x1, y1);
                 Point p2 = new Point(x2, y2);
 
+//                Imgproc.line(mRgba, new Point(p1.x + left, p1.y + top), new Point(p2.x + left, p2.y + top), new Scalar(0, 255, 0), 5);
+//                Imgproc.circle(mRgba, new Point(p1.x+left, p1.y+top), 5, new Scalar(0, 0, 255), 6);
+//                Imgproc.circle(mRgba, new Point(p2.x+left, p2.y+top), 5, new Scalar(255, 0, 0), 6);
                 double slope = (p2.y - p1.y) / (p2.x - p1.x);
-                double y_intercept = 0;
+                double y_intercept;
 
-                if (slope > 0.5 && slope < 2 ) { // Right lane
-                    right_slopes.add(slope);
-                    y_intercept = p1.y - (p1.x*slope);
-                    right_y_intercept.add(y_intercept);
+                if (slope > 0.375 && slope < 2.6) { // Right lane
+                    if (p1.x+left < zoneX1) {
+                        right_slopes.add(slope);
+                        y_intercept = p1.y - (p1.x * slope);
+                        right_y_intercept.add(y_intercept);
+                    }
                 }
-                else if (slope > -2 && slope < -0.5) { // Left lane
-                    left_slopes.add(slope);
-                    y_intercept = p1.y - (p1.x*slope);
-                    left_y_intercept.add(y_intercept);
+                else if (slope > -2.6 && slope < -0.375) { // Left lane
+                    if (p2.x+left > zoneX2) {
+                        left_slopes.add(slope);
+                        y_intercept = p1.y - (p1.x * slope);
+                        left_y_intercept.add(y_intercept);
+                    }
                 }
-
             } catch (Error e) {
                 Log.e(TAG, "onCameraFrame: ", e);
             }
@@ -542,14 +579,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         avg_left_slope /= left_slopes.size();
         avg_left_y_intercept /= left_y_intercept.size();
 
-        //x = (y-b)/m
-        //y = xm + b
+        // x = (y-b)/m
+        // y = xm + b
         double newLeftTopX = (-avg_left_y_intercept)/avg_left_slope;
         double newRightTopX = (0 - avg_right_y_intercept)/avg_right_slope;
 
         Point rightLanePt = new Point((imgHeight - avg_right_y_intercept)/avg_right_slope, imgHeight);
         Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
-//        Imgproc.putText(mRgba, "ROI Slope: " + avg_left_slope + " Other Slope: " + avg_left_y_intercept, new Point(0, 175), Core.FONT_HERSHEY_COMPLEX, 0.5, new Scalar(255, 0, 0));
 
         if (left_slopes.size() != 0) {
             Imgproc.line(mRgba, new Point(newLeftTopX + left, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(0, 255, 255), 5);
@@ -561,14 +597,44 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             double laneCenterX1 = (laneCenterY-top-avg_left_y_intercept)/avg_left_slope + left;
             double laneCenterX2 = (laneCenterY-top-avg_right_y_intercept)/avg_right_slope + left;
             laneCenterX = (laneCenterX1+laneCenterX2) / 2;
+
+            double distanceFromCenter = Math.sqrt((laneCenterX-vehicleCenterX1)*(laneCenterX-vehicleCenterX1) + (laneCenterY-laneCenterY)*(laneCenterY-laneCenterY));
+//            Imgproc.putText(mRgba, ""+distanceFromCenter, new Point(laneCenterX, laneCenterY), Core.FONT_HERSHEY_COMPLEX, 1, new Scalar(255, 255, 255) );
             Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), new Scalar(0, 155, 0), 2, 8);
             Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 6);
+
+            // If lane departure is detected, add an orange layer over output
+            if (distanceFromCenter > 40) {
+                if (!isTimerRunning) {
+                    timer.start();
+                    isTimerRunning = true;
+                    Log.i(TAG, "---------- LaneDrift Start: Timer STARTED ----------");
+                }
+                Core.add(mRgba, new Scalar(255, 128, 0), mRgba);
+            } else if (isTimerRunning){
+                timer.cancel();
+                isTimerRunning = false;
+                Log.i(TAG, "---------- LaneDeparture Stop: Timer STOPPED ----------");
+                if (ttsLane.isSpeaking()) {
+                    ttsLane.stop();
+                }
+            }
+        }
+        else if (isTimerRunning) {
+            timer.cancel();
+            isTimerRunning = false;
+            if (ttsLane.isSpeaking()) {
+                ttsLane.stop();
+            }
+            Log.i(TAG, "---------- TIMER CANCELED: No lanes detected ----------");
         }
     }
 
     @Override
     public void onInit(int status) {
-        tts.setLanguage(Locale.ENGLISH);
+        ttsSpeed.setLanguage(Locale.ENGLISH);
+        ttsLane.setLanguage(Locale.ENGLISH);
+        ttsLane.setSpeechRate(0.9f);
     }
 
     private void setUpCameraServices() {

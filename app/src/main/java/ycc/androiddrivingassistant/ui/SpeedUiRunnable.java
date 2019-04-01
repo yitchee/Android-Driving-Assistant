@@ -20,7 +20,7 @@ public class SpeedUiRunnable implements Runnable {
     @Override
     public void run() {
         try {
-            speedTextView.setText(String.format("%skm/hr", speedVal));
+            speedTextView.setText(String.format("%s km/hr", speedVal));
         } catch (Exception e) {
             Log.e(TAG, "run: ", e);
         }

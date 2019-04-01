@@ -17,8 +17,8 @@ import android.util.Log;
 public class LocationService extends Service {
     private static final String TAG = "LocationService";
     private LocationManager locationManager;
-    private static final int LOCATION_INTERVAL = 1000;
-    private static final int LOCATION_DISTANCE = 10;
+    private static final int LOCATION_INTERVAL = 3000;
+    private static final int LOCATION_DISTANCE = 0;
 
     private class LocationListener implements android.location.LocationListener {
         Location lastLocation;
@@ -41,7 +41,6 @@ public class LocationService extends Service {
             }
             speed = Math.floor((distance / timeDiff) * 3600 * 10) / 10;
             lastLocation.set(location);
-//            Log.i(TAG, "getVehicleSpeed: SPEED: " + speed + " TIME: " + timeDiff + " DISTANCE: " + distance);
 
             prevTime = System.currentTimeMillis();
 
