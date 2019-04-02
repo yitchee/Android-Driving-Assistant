@@ -21,8 +21,10 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
@@ -188,6 +190,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 Log.i(TAG, "onFinish: ---------- TIMER DONE ----------");
             }
         };
+
+        displayMetrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
     }
 
     @Override
@@ -302,7 +307,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         circles.release();
 
         Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
-        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 75, 65);
+        Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 25, 85);
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
@@ -376,9 +381,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Log.d(TAG, "OpenCV initialize failed");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
         }
-        int width = sharedPreferences.getInt("res_width", 1920);
-        int height = sharedPreferences.getInt("res_height", 1080);
-        javaCameraView.setMaxFrameSize(width, height);
+        imgWidth = sharedPreferences.getInt("res_width", 1920);
+        imgHeight = sharedPreferences.getInt("res_height", 1080);
+        javaCameraView.setMaxFrameSize(imgWidth, imgHeight);
         javaCameraView.disableView();
         javaCameraView.enableView();
 
@@ -519,10 +524,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         List<Double> right_y_intercept = new ArrayList<>();
 
         // Threshold zone for detected lanes, lines must be within this zone
-        double zoneX1 = cols-left*2.75;
-        double zoneX2 = left*2.75;
-//        Imgproc.line(mRgba, new Point(zoneX1, 0), new Point(zoneX1, rows), new Scalar(0, 155, 0), 2, 8);
-//        Imgproc.line(mRgba, new Point(zoneX2, 0), new Point(zoneX2, rows), new Scalar(0, 155, 0), 2, 8);
+        double zoneX1 = cols-left*2.5;
+        double zoneX2 = left*2.5;
+        Imgproc.line(mRgba, new Point(zoneX1, 0), new Point(zoneX1, rows), new Scalar(0, 155, 0), 2, 8);
+        Imgproc.line(mRgba, new Point(zoneX2, 0), new Point(zoneX2, rows), new Scalar(0, 155, 0), 2, 8);
 
         for (int i=0; i<lines.rows(); i++) {
             double[] points = lines.get(i, 0);
@@ -784,6 +789,26 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
     };
+
+
+    DisplayMetrics displayMetrics;
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        super.onTouchEvent(event);
+
+        float disHeight = displayMetrics.heightPixels;
+
+        float x = event.getX();
+        float y = event.getY();
+        float z = imgHeight / disHeight;
+
+        float scaledY = y*z;
+        if (scaledY > imgHeight*0.25 && scaledY < imgHeight*0.75 && x > 150 && x < 1770)
+            top = scaledY;
+
+        return true;
+    }
 
     public static boolean hasPermissions(Context context, String... permissions) {
         if (context != null && permissions != null) {
