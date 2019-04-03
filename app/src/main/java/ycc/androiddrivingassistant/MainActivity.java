@@ -260,7 +260,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
-        Imgproc.blur(mGray, mGray, new Size(5, 5), new Point(2, 2));
+        Imgproc.blur(mGray, mGray, new Size(3, 3), new Point(2, 2));
         Imgproc.GaussianBlur(mRgba, mRgba, ksize, sigma);
 
         Mat rgbaInnerWindow;
@@ -278,8 +278,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
         Imgproc.Canny(mask, mEdges, 50, 150);
 
-        Imgproc.resize(mask, mNew, new Size(imgWidth, imgHeight));
-        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 100);
+        Imgproc.resize(mEdges, mNew, new Size(imgWidth, imgHeight));
+        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 15, 150);
 
         if (circles.cols() > 0) {
             for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
@@ -315,7 +315,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         rgbaInnerWindow.release();
         Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 255, 0), 2);
 
-        return mRgba;
+        return mNew;
     }
 
     public class LocationBroadcastReceiver extends BroadcastReceiver {
@@ -526,8 +526,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         // Threshold zone for detected lanes, lines must be within this zone
         double zoneX1 = cols-left*2.5;
         double zoneX2 = left*2.5;
-        Imgproc.line(mRgba, new Point(zoneX1, 0), new Point(zoneX1, rows), new Scalar(0, 155, 0), 2, 8);
-        Imgproc.line(mRgba, new Point(zoneX2, 0), new Point(zoneX2, rows), new Scalar(0, 155, 0), 2, 8);
+        Imgproc.line(mRgba, new Point(zoneX1, top), new Point(zoneX1, top+5), new Scalar(0, 155, 0), 2, 8);
+        Imgproc.line(mRgba, new Point(zoneX2, top), new Point(zoneX2, top+5), new Scalar(0, 155, 0), 2, 8);
 
         for (int i=0; i<lines.rows(); i++) {
             double[] points = lines.get(i, 0);
@@ -611,7 +611,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 6);
 
             // If lane departure is detected, add an orange layer over output
-            if (distanceFromCenter > 40) {
+            if (distanceFromCenter > 50) {
                 if (!isTimerRunning) {
                     timer.start();
                     isTimerRunning = true;
@@ -710,6 +710,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                             fabResolutions.startAnimation(FabClose);
                             fabGps.startAnimation(FabClose);
                             fabSound.startAnimation(FabClose);
+                            fabSound.setClickable(false);
                             fabSettings.startAnimation(FabRotateAntiCw);
                             fabResolutions.setClickable(false);
                             fabGps.setClickable(false);
@@ -718,6 +719,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                             fabResolutions.startAnimation(FabOpen);
                             fabGps.startAnimation(FabOpen);
                             fabSound.startAnimation(FabOpen);
+                            fabSound.setClickable(true);
                             fabSettings.startAnimation(FabRotateCw);
                             fabResolutions.setClickable(true);
                             fabGps.setClickable(true);
@@ -778,6 +780,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     private void getPermissions() {
         if(!hasPermissions(this, PERMISSIONS)){
+            Toast.makeText(getApplicationContext(),"Camera permission is needed or \nthis application will not work.", Toast.LENGTH_LONG).show();
             ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
         }
     }
@@ -798,13 +801,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onTouchEvent(event);
 
         float disHeight = displayMetrics.heightPixels;
+        float disWidth = displayMetrics.widthPixels;
 
         float x = event.getX();
         float y = event.getY();
         float z = imgHeight / disHeight;
 
         float scaledY = y*z;
-        if (scaledY > imgHeight*0.25 && scaledY < imgHeight*0.75 && x > 150 && x < 1770)
+        if (scaledY > imgHeight*0.25 && scaledY < imgHeight*0.75 && x > 125 && x < disWidth-125)
             top = scaledY;
 
         return true;
@@ -814,7 +818,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (context != null && permissions != null) {
             for (String permission : permissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(context,"Camera permission is needed or \nthis application will not work.", Toast.LENGTH_LONG).show();
                     return false;
                 }
             }
