@@ -315,7 +315,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         rgbaInnerWindow.release();
         Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 255, 0), 2);
 
-        return mNew;
+        return mRgba;
     }
 
     public class LocationBroadcastReceiver extends BroadcastReceiver {
