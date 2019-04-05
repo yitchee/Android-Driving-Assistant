@@ -80,6 +80,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     Rect signRegion;
     MatOfPoint laneZone;
 
+    Scalar darkGreen = new Scalar(0, 125, 0);
     Bitmap bm;
     Boolean newSignFlag = false;
 
@@ -213,39 +214,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         laneCenterX = 0;
         laneCenterY = (bottomY-(rows/7) + bottomY-(rows/20)) / 2;
 
-        mRgba = new Mat();
-        mGray = new Mat();
-
-        circles = new Mat();
-        mRed = new Mat();
-        mGreen = new Mat();
-        mBlue = new Mat();
-        mHue_hls = new Mat();
-        mLight_hls = new Mat();
-        mSat_hls = new Mat();
-        mHue_hsv = new Mat();
-        mSat_hsv = new Mat();
-        mVal_hsv = new Mat();
-
-        hsv = new Mat();
-        hls = new Mat();
-        gray = new Mat();
-        rgba = new Mat();
-
-        mNew = new Mat();
-        mask = new Mat();
-        mEdges = new Mat();
-        laneZoneMat = new Mat(rows, cols, CvType.CV_8UC4);
+        initializeAllMats();
     }
 
     @Override
     public void onCameraViewStopped() {
-        mRgba.release();
-        mGray.release();
-        circles.release();
-        mRed.release();
-        mGreen.release();
-        mBlue.release();
+        releaseAllMats();
     }
 
     private Size ksize = new Size(5, 5);
@@ -314,8 +288,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
 
         rgbaInnerWindow.release();
-        Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 125, 0), 2, 8);
-        Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 125, 0), 2);
+        Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), darkGreen, 2, 8);
+        Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), darkGreen, 2);
 
         return mRgba;
     }
@@ -440,13 +414,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     }
 
     public void applyThreshold() {
-        Core.inRange(mRed, new Scalar(210), new Scalar(255), mRed);
+        Scalar lowerThreshold = new Scalar(210), higherThreshold = new Scalar(255);
+
+        Core.inRange(mRed, lowerThreshold, higherThreshold, mRed);
 //        Core.inRange(mGreen, new Scalar(225), new Scalar(255), mGreen);
 //        Core.inRange(mBlue, new Scalar(200), new Scalar(255), mBlue);
 
 //        Core.inRange(mHue_hsv, new Scalar(200), new Scalar(255), mHue_hsv);
 //        Core.inRange(mSat_hsv, new Scalar(200), new Scalar(255), mSat_hsv);
-        Core.inRange(mVal_hsv, new Scalar(210), new Scalar(255), mVal_hsv);
+        Core.inRange(mVal_hsv, lowerThreshold, higherThreshold, mVal_hsv);
 
 //        Core.inRange(mHue_hls, new Scalar(200), new Scalar(255), mHue_hls);
 //        Core.inRange(mLight_hls, new Scalar(200), new Scalar(255), mLight_hls);
@@ -593,15 +569,21 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Point rightLanePt = new Point((imgHeight - avg_right_y_intercept)/avg_right_slope, imgHeight);
         Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
 
+        Point topLeftPt = new Point(newLeftTopX, 0 + top);
+        Point topRightPt = new Point(newRightTopX, 0 + top);
+        Point bottomLeftPt = new Point(-500+left, ((-500*avg_left_slope)+avg_left_y_intercept)+top);
+        Point bottomRightPt = new Point(rightLanePt.x + left, rightLanePt.y + top);
+
         if (right_slopes.size() != 0 && left_slopes.size() != 0) {
             double laneCenterX1 = (laneCenterY-top-avg_left_y_intercept)/avg_left_slope + left;
             double laneCenterX2 = (laneCenterY-top-avg_right_y_intercept)/avg_right_slope + left;
             laneCenterX = (laneCenterX1+laneCenterX2) / 2;
 
-            laneZone = new MatOfPoint(new Point(newLeftTopX, 0 + top), new Point(newRightTopX, 0 + top), new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(-500+left, ((-500*avg_left_slope)+avg_left_y_intercept)+top));
+            laneZone = new MatOfPoint(topLeftPt, topRightPt, bottomRightPt, bottomLeftPt);
             laneZoneMat.setTo(new Scalar(0, 0, 0));
             Imgproc.fillConvexPoly(laneZoneMat, laneZone, new Scalar(255, 240, 160));
             Core.addWeighted(laneZoneMat, .5, mRgba, 1, 0, mRgba);
+            laneZone.release();
 
             double distanceFromCenter = Math.sqrt((laneCenterX-vehicleCenterX1)*(laneCenterX-vehicleCenterX1) + (laneCenterY-laneCenterY)*(laneCenterY-laneCenterY));
 
@@ -622,7 +604,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 }
             }
 
-            Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), new Scalar(0, 125, 0), 2, 8);
+            Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), darkGreen, 2, 8);
             Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 7);
         }
         else if (isTimerRunning) {
@@ -635,10 +617,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         }
 
         if (left_slopes.size() != 0) {
-            Imgproc.line(mRgba, new Point(newLeftTopX, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(225, 0, 0), 8);
+            Imgproc.line(mRgba, topLeftPt, bottomLeftPt, new Scalar(225, 0, 0), 8);
         }
         if (right_slopes.size() != 0) {
-            Imgproc.line(mRgba, new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(newRightTopX, 0 + top), new Scalar(0, 0, 225), 8);
+            Imgproc.line(mRgba, bottomRightPt, topRightPt, new Scalar(0, 0, 225), 8);
         }
     }
 
@@ -781,6 +763,52 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             }
         });
 
+    }
+
+    private void initializeAllMats() {
+        mRgba = new Mat();
+        mGray = new Mat();
+        circles = new Mat();
+        mRed = new Mat();
+        mGreen = new Mat();
+        mBlue = new Mat();
+        mHue_hls = new Mat();
+        mLight_hls = new Mat();
+        mSat_hls = new Mat();
+        mHue_hsv = new Mat();
+        mSat_hsv = new Mat();
+        mVal_hsv = new Mat();
+        hsv = new Mat();
+        hls = new Mat();
+        gray = new Mat();
+        rgba = new Mat();
+        mNew = new Mat();
+        mask = new Mat();
+        mEdges = new Mat();
+        laneZoneMat = new Mat(rows, cols, CvType.CV_8UC4);
+    }
+
+    private void releaseAllMats() {
+        mRgba.release();
+        mGray.release();
+        circles.release();
+        mRed.release();
+        mGreen.release();
+        mBlue.release();
+        mHue_hls.release();
+        mLight_hls.release();
+        mSat_hls.release();
+        mHue_hsv.release();
+        mSat_hsv.release();
+        mVal_hsv.release();
+        hsv.release();
+        hls.release();
+        gray.release();
+        rgba.release();
+        mNew.release();
+        mask.release();
+        mEdges.release();
+        laneZoneMat.release();
     }
 
     private void getPermissions() {
