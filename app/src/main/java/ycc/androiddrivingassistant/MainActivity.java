@@ -47,6 +47,7 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
@@ -72,12 +73,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     Animation FabOpen, FabClose, FabRotateCw, FabRotateAntiCw;
     Boolean isOpen = false;
 
-
     Mat mRgba, mGray, circles;
     Mat mRed, mGreen, mBlue, mHue_hsv, mSat_hsv, mVal_hsv, mHue_hls, mSat_hls, mLight_hls;
     Mat hsv, hls, rgba, gray;
-    Mat mNew, mask, mEdges;
+    Mat mNew, mask, mEdges, laneZoneMat;
     Rect signRegion;
+    MatOfPoint laneZone;
 
     Bitmap bm;
     Boolean newSignFlag = false;
@@ -179,7 +180,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         timer = new CountDownTimer(30000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
-                if (millisUntilFinished < 26000) {
+                if (millisUntilFinished < 27500) {
                     toneGen2.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 250);
                     ttsLane.speak("Lane departure detected", TextToSpeech.QUEUE_ADD, null, "Lane Departure Detected");
                 }
@@ -234,6 +235,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mNew = new Mat();
         mask = new Mat();
         mEdges = new Mat();
+        laneZoneMat = new Mat(rows, cols, CvType.CV_8UC4);
     }
 
     @Override
@@ -306,14 +308,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         circles.release();
 
-        Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 155, 0), 2, 8);
         Imgproc.HoughLinesP(mEdges, lines, 1, Math.PI/180, 50, 25, 85);
         if (lines.rows() > 0) {
             getAverageSlopes(lines);
         }
 
         rgbaInnerWindow.release();
-        Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 255, 0), 2);
+        Imgproc.line(mRgba, new Point(vehicleCenterX1, vehicleCenterY1), new Point(vehicleCenterX2, vehicleCenterY2), new Scalar(0, 125, 0), 2, 8);
+        Imgproc.rectangle(mRgba, new Point(left, top), new Point(cols-left, bottomY), new Scalar(0, 125, 0), 2);
 
         return mRgba;
     }
@@ -542,9 +544,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 Point p1 = new Point(x1, y1);
                 Point p2 = new Point(x2, y2);
 
-//                Imgproc.line(mRgba, new Point(p1.x + left, p1.y + top), new Point(p2.x + left, p2.y + top), new Scalar(0, 255, 0), 5);
-//                Imgproc.circle(mRgba, new Point(p1.x+left, p1.y+top), 5, new Scalar(0, 0, 255), 6);
-//                Imgproc.circle(mRgba, new Point(p2.x+left, p2.y+top), 5, new Scalar(255, 0, 0), 6);
                 double slope = (p2.y - p1.y) / (p2.x - p1.x);
                 double y_intercept;
 
@@ -588,27 +587,23 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         // x = (y-b)/m
         // y = xm + b
-        double newLeftTopX = (-avg_left_y_intercept)/avg_left_slope;
-        double newRightTopX = (0 - avg_right_y_intercept)/avg_right_slope;
+        double newLeftTopX = ((-avg_left_y_intercept)/avg_left_slope) + left;
+        double newRightTopX = ((0 - avg_right_y_intercept)/avg_right_slope) + left;
 
         Point rightLanePt = new Point((imgHeight - avg_right_y_intercept)/avg_right_slope, imgHeight);
         Point leftLanePt = new Point((0), (-left*avg_left_slope)+avg_left_y_intercept);
 
-        if (left_slopes.size() != 0) {
-            Imgproc.line(mRgba, new Point(newLeftTopX + left, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(0, 255, 255), 5);
-        }
-        if (right_slopes.size() != 0) {
-            Imgproc.line(mRgba, new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(newRightTopX + left, 0 + top), new Scalar(255, 0, 255), 5);
-        }
         if (right_slopes.size() != 0 && left_slopes.size() != 0) {
             double laneCenterX1 = (laneCenterY-top-avg_left_y_intercept)/avg_left_slope + left;
             double laneCenterX2 = (laneCenterY-top-avg_right_y_intercept)/avg_right_slope + left;
             laneCenterX = (laneCenterX1+laneCenterX2) / 2;
 
+            laneZone = new MatOfPoint(new Point(newLeftTopX, 0 + top), new Point(newRightTopX, 0 + top), new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(-500+left, ((-500*avg_left_slope)+avg_left_y_intercept)+top));
+            laneZoneMat.setTo(new Scalar(0, 0, 0));
+            Imgproc.fillConvexPoly(laneZoneMat, laneZone, new Scalar(255, 240, 160));
+            Core.addWeighted(laneZoneMat, .5, mRgba, 1, 0, mRgba);
+
             double distanceFromCenter = Math.sqrt((laneCenterX-vehicleCenterX1)*(laneCenterX-vehicleCenterX1) + (laneCenterY-laneCenterY)*(laneCenterY-laneCenterY));
-//            Imgproc.putText(mRgba, ""+distanceFromCenter, new Point(laneCenterX, laneCenterY), Core.FONT_HERSHEY_COMPLEX, 1, new Scalar(255, 255, 255) );
-            Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), new Scalar(0, 155, 0), 2, 8);
-            Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 6);
 
             // If lane departure is detected, add an orange layer over output
             if (distanceFromCenter > 50) {
@@ -626,6 +621,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     ttsLane.stop();
                 }
             }
+
+            Imgproc.line(mRgba, new Point(vehicleCenterX1, laneCenterY), new Point(laneCenterX, laneCenterY), new Scalar(0, 125, 0), 2, 8);
+            Imgproc.circle(mRgba, new Point(laneCenterX, laneCenterY), 4, new Scalar(0, 0, 255), 7);
         }
         else if (isTimerRunning) {
             timer.cancel();
@@ -634,6 +632,13 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 ttsLane.stop();
             }
             Log.i(TAG, "---------- TIMER CANCELED: No lanes detected ----------");
+        }
+
+        if (left_slopes.size() != 0) {
+            Imgproc.line(mRgba, new Point(newLeftTopX, 0 + top), new Point(leftLanePt.x, leftLanePt.y + top), new Scalar(225, 0, 0), 8);
+        }
+        if (right_slopes.size() != 0) {
+            Imgproc.line(mRgba, new Point(rightLanePt.x + left, rightLanePt.y + top), new Point(newRightTopX, 0 + top), new Scalar(0, 0, 225), 8);
         }
     }
 
