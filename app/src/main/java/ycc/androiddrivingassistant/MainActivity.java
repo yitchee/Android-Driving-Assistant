@@ -236,7 +236,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
-        Imgproc.blur(mGray, mGray, new Size(3, 3), new Point(2, 2));
+        Imgproc.blur(mGray, mGray, ksize, blurPt);
         Imgproc.GaussianBlur(mRgba, mRgba, ksize, sigma);
 
         Mat rgbaInnerWindow;
@@ -255,7 +255,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.Canny(mask, mEdges, 50, 150);
 
         Imgproc.resize(mEdges, mNew, new Size(imgWidth, imgHeight));
-        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 15, 150);
+        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 125);
 
         if (circles.cols() > 0) {
             for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
@@ -276,7 +276,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 if (!newSignFlag) {
                     analyzeObject(inputFrame.rgba(), signRegion, radius);
                 }
-//                Log.i(TAG, "onCreate: " + Math.abs(radius*2));
             }
         }
 
