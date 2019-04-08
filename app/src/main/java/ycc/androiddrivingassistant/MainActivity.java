@@ -255,7 +255,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.Canny(mask, mEdges, 50, 150);
 
         Imgproc.resize(mEdges, mNew, new Size(imgWidth, imgHeight));
-        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 2000, 175, 120, 20, 125);
+        Imgproc.HoughCircles(mGray, circles, Imgproc.CV_HOUGH_GRADIENT, 2, 1000, 175, 120, 25, 125);
 
         if (circles.cols() > 0) {
             for (int x=0; x < Math.min(circles.cols(), 5); x++ ) {
@@ -587,7 +587,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             double distanceFromCenter = Math.sqrt((laneCenterX-vehicleCenterX1)*(laneCenterX-vehicleCenterX1) + (laneCenterY-laneCenterY)*(laneCenterY-laneCenterY));
 
             // If lane departure is detected, add an orange layer over output
-            if (distanceFromCenter > 50) {
+            if (distanceFromCenter > 70) {
                 if (!isTimerRunning) {
                     timer.start();
                     isTimerRunning = true;
