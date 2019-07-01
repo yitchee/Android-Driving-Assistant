@@ -6,4 +6,5 @@ Another aim was to minimise the amount of user interaction with the app. Audio f
 Using OpenCV, the app processes the video captured from the device's camera in order identify the current and lane drift. Optical Character Recognition was used to determine the current speed limit from the detected speed signs.
 
 [Video demos](https://www.youtube.com/playlist?list=PLhElOp3DFpOejprstGSl3eXzA8RrNvVGp)
+
 [Google Play Store](https://play.google.com/store/apps/details?id=ycc.androiddrivingassistant)
