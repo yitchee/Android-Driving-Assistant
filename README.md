@@ -6,3 +6,4 @@ Using OpenCV, the app processes the video captured from the device's camera in o
 
 [Video demos](https://www.youtube.com/playlist?list=PLhElOp3DFpOejprstGSl3eXzA8RrNvVGp)  
 [Google Play Store](https://play.google.com/store/apps/details?id=ycc.androiddrivingassistant)
+[Project Disseration](https://github.com/yitchee98/Android-Driving-Assistant/blob/master/YitCheeChin_FYPReport201819.pdf)
